@@ -31,6 +31,8 @@
 
         @Override
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+            System.out.println("🔍 JwtAuthFilter - Request: " + request.getRequestURI());
+
             String authHeader = request.getHeader("Authorization");
             String token = null;
             String username = null;
@@ -38,6 +40,9 @@
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 token = authHeader.substring(7);
                 username = jwtService.extractUsername(token);
+                System.out.println("✅ Token found, username: " + username);
+            }else {
+                System.out.println("❌ No token found");
             }
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -49,8 +54,16 @@
                             userDetails.getAuthorities());
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    System.out.println("✅ Token validated");
+
                 }
             }
-            filterChain.doFilter(request, response);
+            try {
+                filterChain.doFilter(request, response);
+            } catch (Exception e) {
+                System.out.println("❌ Filter error: " + e.getMessage());
+                e.printStackTrace();
+                throw e;
+            }
         }
     }

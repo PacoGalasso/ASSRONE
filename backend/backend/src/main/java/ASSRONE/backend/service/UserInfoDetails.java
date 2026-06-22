@@ -22,9 +22,7 @@ public class UserInfoDetails implements UserDetails {
         this.enabled = Boolean.TRUE.equals(user.getIsActive());
 
         this.authorities = List.of(
-                new SimpleGrantedAuthority(
-                        "ROLE_" + user.getRole().name()
-                )
+                new SimpleGrantedAuthority(user.getRole())  // ✅ La BD a déjà "ROLE_USER"
         );
     }
 

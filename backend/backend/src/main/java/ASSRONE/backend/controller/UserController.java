@@ -1,6 +1,7 @@
 package ASSRONE.backend.controller;
 
 import ASSRONE.backend.model.AuthRequest;
+import ASSRONE.backend.model.AuthResponse;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.UserInfoService;
@@ -30,12 +31,17 @@ public class UserController {
     }
 
     @PostMapping("/generateToken")
-    public String authenticateAndGetToken(@RequestBody AuthRequest authRequest) {
+    public AuthResponse authenticateAndGetToken(@RequestBody AuthRequest authRequest) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword())
         );
         if (authentication.isAuthenticated()) {
-            return jwtService.generateToken(authRequest.getEmail());
+            String token = jwtService.generateToken(authRequest.getEmail());
+            return new AuthResponse(
+                    token,
+                    authRequest.getEmail(),
+                    "ROLE_USER"
+            );
         } else {
             throw new UsernameNotFoundException("Invalid user request!");
         }
