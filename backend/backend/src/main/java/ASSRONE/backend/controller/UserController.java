@@ -36,11 +36,14 @@ public class UserController {
                 new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword())
         );
         if (authentication.isAuthenticated()) {
-            String token = jwtService.generateToken(authRequest.getEmail());
+            String accessToken = jwtService.generateToken(authRequest.getEmail());
+            String refreshToken = jwtService.generateRefreshToken(authRequest.getEmail());
+
             return new AuthResponse(
-                    token,
+                    accessToken,
                     authRequest.getEmail(),
-                    "ROLE_USER"
+                    "ROLE_USER",
+                    refreshToken
             );
         } else {
             throw new UsernameNotFoundException("Invalid user request!");
