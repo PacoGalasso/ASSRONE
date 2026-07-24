@@ -1,0 +1,14 @@
+<!-- shared/components/section-heading/section-heading.html -->
+<div class="mb-12" [class.text-center]="align() === 'center'">
+  <p class="text-sm font-semibold tracking-widest uppercase text-[#AD7A26] mb-3">
+    {{ eyebrow() }}
+  </p>
+  <h2 class="font-display text-3xl md:text-4xl font-semibold text-[#122347] leading-tight">
+    {{ title() }}
+  </h2>
+  @if (subtitle()) {
+    <p class="mt-3 text-[#5C5F66] max-w-2xl" [class.mx-auto]="align() === 'center'">
+      {{ subtitle() }}
+    </p>
+  }
+</div>

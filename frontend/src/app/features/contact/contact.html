@@ -1,0 +1,89 @@
+<!-- features/contact/contact.html -->
+<div class="max-w-5xl mx-auto px-6 py-16 grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-16">
+
+  <div>
+    <p class="text-sm font-semibold tracking-widest uppercase text-[#AD7A26] mb-3">Contact</p>
+    <h1 class="font-display text-4xl font-semibold text-[#122347] mb-6">Une question ?</h1>
+    <p class="text-[#5C5F66] leading-relaxed mb-10">
+      Écrivez-nous pour toute question sur l'association, l'adhésion, ou nos formations. Nous vous répondons dans les
+      meilleurs délais.
+    </p>
+
+    <div class="flex flex-col gap-6 border-t border-[#E3E1DC] pt-8">
+      <div>
+        <p class="text-sm font-semibold text-[#122347] mb-1">Email</p>
+        <a href="mailto:info@assrone.ch" class="text-[#AD7A26] hover:text-[#122347] transition-colors">
+          info&#64;assrone.ch
+        </a>
+      </div>
+      <div>
+        <p class="text-sm font-semibold text-[#122347] mb-1">Siège</p>
+        <p class="text-[#5C5F66]">Suisse Romande</p>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    @if (!submitted()) {
+      <form [formGroup]="form" (ngSubmit)="onSubmit()" class="flex flex-col gap-6">
+
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Nom complet</label>
+          <input type="text" formControlName="fullName"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+          @if (form.controls.fullName.invalid && form.controls.fullName.touched) {
+            <p class="text-sm text-red-600 mt-1">Le nom est obligatoire.</p>
+          }
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Email</label>
+          <input type="email" formControlName="email"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+          @if (form.controls.email.invalid && form.controls.email.touched) {
+            <p class="text-sm text-red-600 mt-1">Email valide requis.</p>
+          }
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Sujet</label>
+          <input type="text" formControlName="subject"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+          @if (form.controls.subject.invalid && form.controls.subject.touched) {
+            <p class="text-sm text-red-600 mt-1">Le sujet est obligatoire.</p>
+          }
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Message</label>
+          <textarea formControlName="message" rows="6"
+                    class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"></textarea>
+          @if (form.controls.message.invalid && form.controls.message.touched) {
+            <p class="text-sm text-red-600 mt-1">Le message est obligatoire.</p>
+          }
+        </div>
+
+        @if (errorMessage()) {
+          <p class="text-sm text-red-600">{{ errorMessage() }}</p>
+        }
+
+        <button type="submit" [disabled]="submitting()"
+                class="bg-[#122347] text-white rounded-md py-3 font-medium hover:bg-[#1E3A6E] transition-colors disabled:opacity-50">
+          {{ submitting() ? 'Envoi...' : 'Envoyer le message' }}
+        </button>
+      </form>
+    } @else {
+      <div class="text-center py-12">
+        <div class="w-14 h-14 rounded-full bg-[#122347] text-white flex items-center justify-center mx-auto mb-5">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               class="h-7 w-7">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+          </svg>
+        </div>
+        <h2 class="font-display text-xl font-semibold text-[#122347] mb-2">Message envoyé</h2>
+        <p class="text-[#5C5F66]">Nous vous répondrons dans les meilleurs délais.</p>
+      </div>
+    }
+  </div>
+
+</div>

@@ -1,0 +1,102 @@
+<!-- features/profile/profile.html -->
+<div class="max-w-2xl mx-auto px-6 py-16">
+
+  @if (loading()) {
+    <p class="text-[#5C5F66]">Chargement du profil...</p>
+  } @else {
+
+    <h1 class="font-display text-3xl font-semibold text-[#122347] mb-2">Mon profil</h1>
+    <p class="text-[#5C5F66] mb-10">
+      {{ profile()?.role === 'ROLE_ADMIN' ? 'Administrateur' : 'Membre' }} · membre
+      depuis {{ profile()?.createdAt | date:'MMMM yyyy' }}
+    </p>
+
+    <!-- Infos -->
+    <section class="mb-14">
+      <h2 class="font-semibold text-[#122347] mb-6 pb-3 border-b border-[#E3E1DC]">Informations</h2>
+
+      <form [formGroup]="infoForm" (ngSubmit)="onSaveInfo()" class="flex flex-col gap-5">
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Nom d'utilisateur</label>
+          <input type="text" formControlName="username"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-[#122347] mb-1.5">Prénom</label>
+            <input type="text" formControlName="firstName"
+                   class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-[#122347] mb-1.5">Nom</label>
+            <input type="text" formControlName="lastName"
+                   class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Email</label>
+          <input type="email" formControlName="email"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+        </div>
+
+        @if (infoError()) {
+          <p class="text-sm text-red-600">{{ infoError() }}</p>
+        }
+        @if (infoSuccess()) {
+          <p class="text-sm text-green-700">Informations mises à jour.</p>
+        }
+
+        <button type="submit" [disabled]="savingInfo()"
+                class="self-start bg-[#122347] text-white rounded-md px-6 py-2.5 font-medium hover:bg-[#1E3A6E] transition-colors disabled:opacity-50">
+          {{ savingInfo() ? 'Enregistrement...' : 'Enregistrer' }}
+        </button>
+      </form>
+    </section>
+
+    <!-- Mot de passe -->
+    <section>
+      <h2 class="font-semibold text-[#122347] mb-6 pb-3 border-b border-[#E3E1DC]">Changer le mot de passe</h2>
+
+      <form [formGroup]="passwordForm" (ngSubmit)="onChangePassword()" class="flex flex-col gap-5">
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Mot de passe actuel</label>
+          <input type="password" formControlName="currentPassword"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Nouveau mot de passe</label>
+          <input type="password" formControlName="newPassword"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+          @if (passwordForm.controls.newPassword.invalid && passwordForm.controls.newPassword.touched) {
+            <p class="text-sm text-red-600 mt-1">8 caractères minimum.</p>
+          }
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Confirmer le nouveau mot de passe</label>
+          <input type="password" formControlName="confirmPassword"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+          @if (passwordForm.errors?.['passwordsMismatch'] && passwordForm.controls.confirmPassword.touched) {
+            <p class="text-sm text-red-600 mt-1">Les mots de passe ne correspondent pas.</p>
+          }
+        </div>
+
+        @if (passwordError()) {
+          <p class="text-sm text-red-600">{{ passwordError() }}</p>
+        }
+        @if (passwordSuccess()) {
+          <p class="text-sm text-green-700">Mot de passe modifié avec succès.</p>
+        }
+
+        <button type="submit" [disabled]="savingPassword()"
+                class="self-start bg-[#122347] text-white rounded-md px-6 py-2.5 font-medium hover:bg-[#1E3A6E] transition-colors disabled:opacity-50">
+          {{ savingPassword() ? 'Modification...' : 'Modifier le mot de passe' }}
+        </button>
+      </form>
+    </section>
+
+  }
+</div>

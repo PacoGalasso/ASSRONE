@@ -1,0 +1,133 @@
+<!-- features/charter/charter.html -->
+<div class="max-w-3xl mx-auto px-6 py-16">
+
+  <a routerLink="/membership"
+     class="inline-block mb-8 text-sm font-semibold text-gold hover:text-navy transition-colors">
+    ← Retour à l'adhésion
+  </a>
+
+  <p class="text-sm font-semibold tracking-widest uppercase text-gold mb-3">Documents officiels</p>
+  <h1 class="font-display text-4xl font-semibold text-navy mb-10">Charte ASSRONE</h1>
+
+  <!-- Préambule -->
+  <section class="mb-14">
+    <h2 class="font-display text-xl font-semibold text-navy mb-4 pb-3 border-b border-line">Préambule</h2>
+    <p class="text-ink leading-relaxed">{{ preamble }}</p>
+  </section>
+
+  <!-- Buts -->
+  <section class="mb-14">
+    <h2 class="font-display text-xl font-semibold text-navy mb-6 pb-3 border-b border-line">Buts</h2>
+    <div class="flex flex-col gap-6">
+      @for (goal of goals; track goal.title) {
+        <div>
+          <h3 class="font-semibold text-navy mb-1.5">{{ goal.title }}</h3>
+          <p class="text-ink-muted leading-relaxed">{{ goal.description }}</p>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Valeurs fondamentales -->
+  <section class="mb-14">
+    <h2 class="font-display text-xl font-semibold text-navy mb-6 pb-3 border-b border-line">Valeurs fondamentales</h2>
+    <div class="flex flex-col gap-6">
+      @for (value of values; track value.title) {
+        <div>
+          <h3 class="font-semibold text-navy mb-1.5">{{ value.title }}</h3>
+          <p class="text-ink-muted leading-relaxed">{{ value.description }}</p>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Engagements -->
+  <section class="mb-14 bg-paper rounded-xl p-8">
+    <h2 class="font-display text-xl font-semibold text-navy mb-4">Engagements</h2>
+    <p class="text-ink leading-relaxed">{{ commitmentIntro }}</p>
+  </section>
+
+  <!-- Acteurs / Société -->
+  <section class="mb-14">
+    <h2 class="font-display text-xl font-semibold text-navy mb-6 pb-3 border-b border-line">Acteurs et société</h2>
+    <div class="flex flex-col gap-8">
+      @for (group of actorGroups; track group.title) {
+        <div>
+          <h3 class="font-semibold text-navy mb-3">{{ group.title }}</h3>
+          <ul class="flex flex-col gap-2">
+            @for (item of group.items; track item) {
+              <li class="flex gap-2 text-ink-muted leading-relaxed">
+                <span class="text-gold">—</span>
+                <span>{{ item }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Devoirs généraux -->
+  <section class="mb-14">
+    <h2 class="font-display text-xl font-semibold text-navy mb-6 pb-3 border-b border-line">Devoirs généraux</h2>
+    <div class="flex flex-col gap-6">
+      @for (duty of generalDuties; track duty.title) {
+        <div>
+          <h3 class="font-semibold text-navy mb-1.5">{{ duty.title }}</h3>
+          <p class="text-ink-muted leading-relaxed">{{ duty.description }}</p>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Conséquences -->
+  <section class="mb-14">
+    <h2 class="font-display text-xl font-semibold text-navy mb-6 pb-3 border-b border-line">Conséquences du non-respect
+      des devoirs</h2>
+    <div class="flex flex-col gap-6">
+      @for (consequence of consequences; track consequence.title) {
+        <div>
+          <h3 class="font-semibold text-navy mb-1.5">{{ consequence.title }}</h3>
+          <p class="text-ink-muted leading-relaxed">{{ consequence.description }}</p>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Références -->
+  <section class="mb-16">
+    <h2 class="font-display text-xl font-semibold text-navy mb-6 pb-3 border-b border-line">Références fondamentales
+      complémentaires</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+      <div>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-gold mb-3">Références légales</h3>
+        <ul class="flex flex-col gap-1.5 text-sm text-ink-muted">
+          @for (ref of legalReferences; track ref) {
+            <li>{{ ref }}</li>
+          }
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-gold mb-3">Principes éthiques et déontologie</h3>
+        <ul class="flex flex-col gap-1.5 text-sm text-ink-muted">
+          @for (ref of ethicalReferences; track ref) {
+            <li>{{ ref }}</li>
+          }
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Acceptation -->
+  <section class="border-t border-line pt-12 text-center">
+    <h2 class="font-display text-2xl font-semibold text-navy mb-3">Un engagement éthique partagé</h2>
+    <p class="text-ink-muted max-w-lg mx-auto mb-8">
+      En adhérant à ASSRONE, les membres actifs s'engagent à signer et respecter cette charte.
+    </p>
+    <button (click)="acceptCharter()" type="button"
+            class="bg-navy text-white px-8 py-3.5 rounded-md font-semibold hover:bg-navy-light transition-colors">
+      J'ai lu et j'accepte cette charte →
+    </button>
+  </section>
+
+</div>

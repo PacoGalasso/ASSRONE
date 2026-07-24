@@ -1,0 +1,150 @@
+<!-- shared/components/navbar/navbar.html -->
+<nav class="bg-white border-b border-line sticky top-0 z-40">
+  <div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+    <div class="flex h-14 sm:h-16 justify-between items-center gap-4">
+      <div class="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
+        <img src="assets/Logo.jpeg" alt="ASSRONE" class="h-10 sm:h-12 w-auto flex-shrink-0"/>
+
+        <nav class="hidden md:flex gap-1 lg:gap-2">
+          <a routerLink="/" routerLinkActive="text-navy border-gold"
+             [routerLinkActiveOptions]="{exact: true}"
+             class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-medium text-ink-muted border-b-2 border-transparent hover:text-navy transition-colors whitespace-nowrap">
+            Accueil
+          </a>
+          <a routerLink="/about" routerLinkActive="text-navy border-gold"
+             class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-medium text-ink-muted border-b-2 border-transparent hover:text-navy transition-colors whitespace-nowrap">
+            À propos
+          </a>
+          <a routerLink="/events" routerLinkActive="text-navy border-gold"
+             class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-medium text-ink-muted border-b-2 border-transparent hover:text-navy transition-colors whitespace-nowrap">
+            Événements
+          </a>
+          <a routerLink="/membership" routerLinkActive="text-navy border-gold"
+             class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-medium text-ink-muted border-b-2 border-transparent hover:text-navy transition-colors whitespace-nowrap">
+            Adhésion
+          </a>
+          <a routerLink="/contact" routerLinkActive="text-navy border-gold"
+             class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-medium text-ink-muted border-b-2 border-transparent hover:text-navy transition-colors whitespace-nowrap">
+            Contact
+          </a>
+          <a routerLink="/statutes" routerLinkActive="text-navy border-gold"
+             class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-medium text-ink-muted border-b-2 border-transparent hover:text-navy transition-colors whitespace-nowrap">
+            Statuts
+          </a>
+
+          @if (isLoggedIn()) {
+            <a routerLink="/members-portal" routerLinkActive="text-navy border-gold"
+               class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-medium text-ink-muted border-b-2 border-transparent hover:text-navy transition-colors whitespace-nowrap">
+              Espace membres
+            </a>
+
+            @if (isAdmin()) {
+              <a routerLink="/admin/documents" routerLinkActive="border-gold"
+                 class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-semibold text-gold border-b-2 border-transparent hover:opacity-80 transition-opacity whitespace-nowrap">
+                Admin
+              </a>
+            }
+          }
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+        @if (!isLoggedIn()) {
+          <a routerLink="/auth/login"
+             class="hidden sm:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 rounded-md bg-navy text-white text-xs sm:text-sm font-semibold hover:bg-navy-light transition-colors whitespace-nowrap">
+            Se connecter
+          </a>
+        }
+
+        @if (isLoggedIn()) {
+          <div class="relative">
+            <button (click)="toggleProfile($event)" type="button" class="relative flex-shrink-0">
+              <img
+                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=facearea&w=256&h=256"
+                alt="Profile" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full ring-2 ring-line"/>
+            </button>
+
+            @if (isProfileOpen()) {
+              <div class="absolute right-0 mt-2 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-line z-50">
+                <div class="px-4 py-2 border-b border-line">
+                  <p class="text-sm font-medium text-navy">{{ user()?.username }}</p>
+                  <p class="text-xs text-ink-muted">{{ user()?.role }}</p>
+                </div>
+                <a routerLink="/profile" (click)="closeMenus()"
+                   class="block px-4 py-2 text-sm text-ink-muted hover:bg-paper">Profil</a>
+                <button (click)="logout()" type="button"
+                        class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-paper border-t border-line font-semibold">
+                  Déconnexion
+                </button>
+              </div>
+            }
+          </div>
+        }
+
+        <button (click)="toggleMenu()" class="md:hidden p-2 rounded hover:bg-paper text-navy flex-shrink-0"
+                type="button">
+          @if (isMenuOpen()) {
+            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          } @else {
+            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          }
+        </button>
+      </div>
+    </div>
+
+    @if (isMenuOpen()) {
+      <nav class="md:hidden py-2 space-y-1 border-t border-line">
+        <a routerLink="/" (click)="closeMenus()" routerLinkActive="bg-paper text-navy"
+           [routerLinkActiveOptions]="{exact: true}"
+           class="block px-3 py-2 rounded text-sm font-medium text-ink-muted hover:bg-paper">
+          Accueil
+        </a>
+        <a routerLink="/about" (click)="closeMenus()" routerLinkActive="bg-paper text-navy"
+           class="block px-3 py-2 rounded text-sm font-medium text-ink-muted hover:bg-paper">
+          À propos
+        </a>
+        <a routerLink="/events" (click)="closeMenus()" routerLinkActive="bg-paper text-navy"
+           class="block px-3 py-2 rounded text-sm font-medium text-ink-muted hover:bg-paper">
+          Événements
+        </a>
+        <a routerLink="/membership" (click)="closeMenus()" routerLinkActive="bg-paper text-navy"
+           class="block px-3 py-2 rounded text-sm font-medium text-ink-muted hover:bg-paper">
+          Adhésion
+        </a>
+        <a routerLink="/contact" (click)="closeMenus()" routerLinkActive="bg-paper text-navy"
+           class="block px-3 py-2 rounded text-sm font-medium text-ink-muted hover:bg-paper">
+          Contact
+        </a>
+        <a routerLink="/statutes" (click)="closeMenus()" routerLinkActive="bg-paper text-navy"
+           class="block px-3 py-2 rounded text-sm font-medium text-ink-muted hover:bg-paper">
+          Statuts
+        </a>
+
+        @if (isLoggedIn()) {
+          <a routerLink="/members-portal" (click)="closeMenus()" routerLinkActive="bg-paper text-navy"
+             class="block px-3 py-2 rounded text-sm font-medium text-ink-muted hover:bg-paper border-t border-line mt-2 pt-3">
+            Espace membres
+          </a>
+
+          @if (isAdmin()) {
+            <a routerLink="/admin/documents" (click)="closeMenus()" routerLinkActive="bg-paper"
+               class="block px-3 py-2 rounded text-sm font-semibold text-gold hover:bg-paper">
+              Admin Documents
+            </a>
+          }
+        }
+
+        @if (!isLoggedIn()) {
+          <a routerLink="/auth/login" (click)="closeMenus()"
+             class="block px-3 py-2 rounded text-sm bg-navy text-white font-semibold hover:bg-navy-light text-center border-t border-line mt-2 pt-3">
+            Se connecter
+          </a>
+        }
+      </nav>
+    }
+  </div>
+</nav>
