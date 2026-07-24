@@ -1,14 +1,23 @@
 package ASSRONE.backend.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
+import lombok.*;
 
-@Data
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class UpdateProfileRequest {
 
-    @NotBlank(message = "First name required")
-    private String firstName;
+    @NotBlank(message = "Le nom d'utilisateur est obligatoire")
+    private String username;
 
-    @NotBlank(message = "Last name required")
+    private String firstName;
     private String lastName;
+
+    @NotBlank(message = "L'email est obligatoire")
+    @Email(message = "Format d'email invalide")
+    private String email;
 }

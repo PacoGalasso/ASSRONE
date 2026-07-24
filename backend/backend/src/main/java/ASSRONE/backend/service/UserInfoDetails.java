@@ -21,10 +21,10 @@ public class UserInfoDetails implements UserDetails {
         this.password = user.getPassword();
         this.enabled = Boolean.TRUE.equals(user.getIsActive());
 
+        // La colonne stocke "USER"/"ADMIN" (contrainte SQL), Spring Security
+        // attend le préfixe "ROLE_" pour que hasRole(...) fonctionne.
         this.authorities = List.of(
-                new SimpleGrantedAuthority(
-                        "ROLE_" + user.getRole().name()
-                )
+                new SimpleGrantedAuthority("ROLE_" + user.getRole())
         );
     }
 
