@@ -17,49 +17,53 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
-        System.out.println("🔐 SecurityConfig LOADED!");
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        System.out.println("🔐 Building SecurityFilterChain...");
-
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
-                                .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/events").authenticated()
-                                .requestMatchers(HttpMethod.POST, "/api/membership-applications").permitAll()
-                                .requestMatchers(HttpMethod.GET, "/api/membership-applications").hasRole("ADMIN")
-//                        .requestMatchers("/auth/welcome").permitAll()
-//                        .requestMatchers("/auth/addNewUser").permitAll()
-//                        .requestMatchers("/auth/generateToken").permitAll()
-//                        .requestMatchers("/auth/user/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
-//                        .requestMatchers("/auth/admin/**").hasAuthority("ROLE_ADMIN")
-//                        .anyRequest().authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/events").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/membership-applications").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/membership-applications").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/documents").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/documents/*/download").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/documents").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/contact").permitAll()
+                        .requestMatchers("/auth/welcome").permitAll()
+                        .requestMatchers("/auth/addNewUser").permitAll()
+                        .requestMatchers("/auth/generateToken").permitAll()
+                        .requestMatchers("/auth/user/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
+                        .requestMatchers("/auth/admin/**").hasAuthority("ROLE_ADMIN")
+                        .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterAfter(jwtAuthFilter, SecurityContextHolderFilter.class);
 
-        System.out.println("✅ SecurityFilterChain built successfully!");
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(Arrays.asList("http://localhost:4200"));
+        config.setAllowedOrigins(List.of("http://localhost:4200"));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(Arrays.asList("*"));
+        config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

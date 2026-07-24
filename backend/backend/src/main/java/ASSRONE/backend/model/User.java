@@ -34,9 +34,10 @@ public class User {
     @Column(name = "last_name")
     private String lastName;
 
+    // model/User.java — corrige uniquement la valeur par défaut du champ role
     @Column(name = "role", nullable = false)
     @Builder.Default
-    private String role = "ROLE_USER";
+    private String role = "USER";
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default

@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,10 +40,15 @@ public class UserController {
             String accessToken = jwtService.generateToken(authRequest.getEmail());
             String refreshToken = jwtService.generateRefreshToken(authRequest.getEmail());
 
+            String role = authentication.getAuthorities().stream()
+                    .findFirst()
+                    .map(GrantedAuthority::getAuthority)
+                    .orElse("ROLE_USER");
+
             return new AuthResponse(
                     accessToken,
                     authRequest.getEmail(),
-                    "ROLE_USER",
+                    role,
                     refreshToken
             );
         } else {
