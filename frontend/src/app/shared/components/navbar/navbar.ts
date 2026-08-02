@@ -18,7 +18,6 @@ export class Navbar {
 
   isLoggedIn = this.authService.isLoggedIn;
   user = this.authService.user;
-  isAdmin = () => this.authService.isAdmin();
 
   toggleMenu = () => this.isMenuOpen.update(v => !v);
   toggleProfile = (e: Event) => {

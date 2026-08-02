@@ -37,13 +37,6 @@
                class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-medium text-ink-muted border-b-2 border-transparent hover:text-navy transition-colors whitespace-nowrap">
               Espace membres
             </a>
-
-            @if (isAdmin()) {
-              <a routerLink="/admin/documents" routerLinkActive="border-gold"
-                 class="px-2 lg:px-3 py-2 text-xs sm:text-sm font-semibold text-gold border-b-2 border-transparent hover:opacity-80 transition-opacity whitespace-nowrap">
-                Admin
-              </a>
-            }
           }
         </nav>
       </div>
@@ -129,13 +122,6 @@
              class="block px-3 py-2 rounded text-sm font-medium text-ink-muted hover:bg-paper border-t border-line mt-2 pt-3">
             Espace membres
           </a>
-
-          @if (isAdmin()) {
-            <a routerLink="/admin/documents" (click)="closeMenus()" routerLinkActive="bg-paper"
-               class="block px-3 py-2 rounded text-sm font-semibold text-gold hover:bg-paper">
-              Admin Documents
-            </a>
-          }
         }
 
         @if (!isLoggedIn()) {

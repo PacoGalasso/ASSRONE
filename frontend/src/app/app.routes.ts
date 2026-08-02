@@ -82,22 +82,6 @@ export const routes: Routes = [
         canActivate: [adminGuard],
         loadComponent: () => import('./features/create-event/create-event').then(m => m.CreateEvent)
       },
-
-      // ===== ADMIN ROUTES =====
-      {
-        path: 'admin',
-        canActivate: [adminGuard],
-        children: [
-          {
-            path: 'documents',
-            loadComponent: () => import('./features/admin-documents/admin-documents').then(m => m.AdminDocuments)
-          },
-          {
-            path: 'users',
-            loadComponent: () => import('./features/admin-users/admin-users').then(m => m.AdminUsers)
-          }
-        ]
-      }
     ]
   },
 
