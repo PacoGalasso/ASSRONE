@@ -19,4 +19,14 @@ export class ProfileService {
   changePassword(request: ChangePasswordRequest): Observable<void> {
     return this.http.put<void>(`${this.baseUrl}/password`, request);
   }
+
+  uploadAvatar(file: File): Observable<UserProfile> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<UserProfile>(`${this.baseUrl}/avatar`, formData);
+  }
+
+  getAvatar(): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/avatar`, {responseType: 'blob'});
+  }
 }

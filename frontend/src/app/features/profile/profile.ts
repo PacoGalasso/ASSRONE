@@ -1,5 +1,5 @@
 // features/profile/profile.ts
-import {Component, inject, OnInit, signal} from '@angular/core';
+import {Component, computed, inject, OnInit, signal} from '@angular/core';
 import {AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators} from '@angular/forms';
 import {ProfileService} from '../../core/auth/services/profile-service';
 import {UserProfile} from '../../core/auth/models/profile.model';
@@ -27,6 +27,14 @@ export class Profile implements OnInit {
   savingPassword = signal(false);
   passwordSuccess = signal(false);
   passwordError = signal<string | null>(null);
+  avatarUrl = signal<string | null>(null);
+  uploadingAvatar = signal(false);
+  avatarError = signal<string | null>(null);
+  initials = computed(() => {
+    const p = this.profile();
+    if (!p) return '';
+    return `${p.firstName?.[0] ?? ''}${p.lastName?.[0] ?? ''}`.toUpperCase() || p.username[0]?.toUpperCase() || '?';
+  });
   private profileService = inject(ProfileService);
   private fb = inject(FormBuilder);
   infoForm = this.fb.nonNullable.group({
@@ -58,6 +66,41 @@ export class Profile implements OnInit {
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
+    });
+    this.loadAvatar();
+  }
+
+  onAvatarSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    if (!file) return;
+
+    this.avatarError.set(null);
+    this.uploadingAvatar.set(true);
+
+    this.profileService.uploadAvatar(file).subscribe({
+      next: (data) => {
+        this.profile.set(data);
+        this.uploadingAvatar.set(false);
+        this.loadAvatar();
+      },
+      error: () => {
+        this.avatarError.set("Une erreur est survenue lors de l'envoi de la photo.");
+        this.uploadingAvatar.set(false);
+      },
+    });
+  }
+
+  private loadAvatar(): void {
+    this.profileService.getAvatar().subscribe({
+      next: (blob) => {
+        const previous = this.avatarUrl();
+        if (previous) {
+          window.URL.revokeObjectURL(previous);
+        }
+        this.avatarUrl.set(window.URL.createObjectURL(blob));
+      },
+      error: () => this.avatarUrl.set(null),
     });
   }
 

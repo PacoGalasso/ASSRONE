@@ -3,12 +3,10 @@ import {HttpErrorResponse, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest}
 import {BehaviorSubject, Observable, throwError} from 'rxjs';
 import {catchError, filter, switchMap, take} from 'rxjs/operators';
 import {AuthService} from '../services/auth-service';
-import {Router} from '@angular/router';
 
 @Injectable()
 export class JwtInterceptor implements HttpInterceptor {
   private authService = inject(AuthService);
-  private router = inject(Router);
   private isRefreshing = false;
   private refreshTokenSubject: BehaviorSubject<any> = new BehaviorSubject<any>(null);
 
@@ -55,7 +53,6 @@ export class JwtInterceptor implements HttpInterceptor {
         catchError((err) => {
           this.isRefreshing = false;
           this.authService.logout();
-          this.router.navigate(['/auth/login']);
           return throwError(() => err);
         })
       );
