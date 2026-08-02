@@ -86,7 +86,7 @@ public class UserProfileService {
     public Resource loadAvatar(String email) throws MalformedURLException {
         User user = findByEmailOrThrow(email);
         if (user.getAvatarFilename() == null) {
-            throw new IllegalArgumentException("Aucune photo de profil");
+            return null;
         }
         Path path = Paths.get(uploadDir, "avatars").resolve(user.getAvatarFilename());
         return new UrlResource(path.toUri());

@@ -47,6 +47,9 @@ public class ProfileController {
     @GetMapping("/avatar")
     public ResponseEntity<Resource> getAvatar(Authentication authentication) throws IOException {
         Resource resource = userProfileService.loadAvatar(authentication.getName());
+        if (resource == null) {
+            return ResponseEntity.notFound().build();
+        }
         String contentType = java.nio.file.Files.probeContentType(resource.getFile().toPath());
         return ResponseEntity.ok()
                 .contentType(contentType != null ? MediaType.parseMediaType(contentType) : MediaType.APPLICATION_OCTET_STREAM)
