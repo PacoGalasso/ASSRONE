@@ -48,7 +48,7 @@ export class AuthService {
 
   logout(): void {
     this.clearAuth();
-    this.router.navigate(['/auth/login']);
+    this.router.navigate(['/']);
   }
 
   isAdmin(): boolean {

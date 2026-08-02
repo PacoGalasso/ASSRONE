@@ -75,4 +75,10 @@ public class DocumentService {
         Path filePath = Paths.get(uploadDir).resolve(document.getStoredFilename());
         return new UrlResource(filePath.toUri());
     }
+
+    public void delete(Long id) throws IOException {
+        Document document = getById(id);
+        Files.deleteIfExists(Paths.get(uploadDir).resolve(document.getStoredFilename()));
+        documentRepository.delete(document);
+    }
 }
