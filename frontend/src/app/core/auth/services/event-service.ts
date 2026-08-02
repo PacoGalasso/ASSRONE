@@ -24,4 +24,8 @@ export class EventService {
   register(eventId: number, request: EventRegistrationRequest): Observable<EventItem> {
     return this.http.post<EventItem>(`${this.baseUrl}/${eventId}/register`, request);
   }
+
+  delete(eventId: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${eventId}`);
+  }
 }

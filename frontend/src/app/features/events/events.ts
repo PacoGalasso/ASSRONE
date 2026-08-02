@@ -24,6 +24,7 @@ class Events implements OnInit {
   registering = signal(false);
   registrationError = signal<string | null>(null);
   registeredIds = signal<Set<number>>(new Set());
+  deletingId = signal<number | null>(null);
 
   readonly typeLabel = typeLabel;
   readonly day = eventDay;
@@ -73,6 +74,21 @@ class Events implements OnInit {
         );
         this.registering.set(false);
       },
+    });
+  }
+
+  onDelete(event: EventItem): void {
+    if (!confirm(`Supprimer l'événement "${event.title}" ? Cette action est irréversible.`)) {
+      return;
+    }
+
+    this.deletingId.set(event.id);
+    this.eventService.delete(event.id).subscribe({
+      next: () => {
+        this.events.update(list => list.filter(e => e.id !== event.id));
+        this.deletingId.set(null);
+      },
+      error: () => this.deletingId.set(null),
     });
   }
 }
