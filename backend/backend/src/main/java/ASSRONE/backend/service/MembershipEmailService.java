@@ -35,6 +35,19 @@ public class MembershipEmailService {
         mailSender.send(email);
     }
 
+    public void sendApplicationConfirmation(MembershipApplication application) {
+        SimpleMailMessage email = new SimpleMailMessage();
+        email.setFrom(fromAddress);
+        email.setTo(application.getEmail());
+        email.setSubject("Votre demande d'adhésion à ASSRONE a bien été reçue");
+        email.setText(
+                "Bonjour " + application.getFullName() + ",\n\n"
+                        + "Nous avons bien reçu votre demande d'adhésion à ASSRONE. Le Comité va l'examiner et vous recontactera prochainement.\n\n"
+                        + "À bientôt,\nL'équipe ASSRONE"
+        );
+        mailSender.send(email);
+    }
+
     public void sendAccountCreated(MembershipApplication application, String rawPassword) {
         SimpleMailMessage email = new SimpleMailMessage();
         email.setFrom(fromAddress);

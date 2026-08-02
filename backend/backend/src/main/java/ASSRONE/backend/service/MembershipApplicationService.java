@@ -35,6 +35,7 @@ public class MembershipApplicationService {
         MembershipApplication entity = mapper.fromCreateRequest(request);
         MembershipApplication saved = repository.save(entity);
         membershipEmailService.sendApplicationNotification(saved);
+        membershipEmailService.sendApplicationConfirmation(saved);
         return mapper.toDto(saved);
     }
 
