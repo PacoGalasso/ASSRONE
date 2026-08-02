@@ -28,4 +28,14 @@ public class MembershipApplicationController {
     public List<MembershipApplicationDto> getAll() {
         return service.getAll();
     }
+
+    @PostMapping("/{id}/accept")
+    public MembershipApplicationDto accept(@PathVariable Long id) {
+        return service.accept(id);
+    }
+
+    @PostMapping("/{id}/reject")
+    public MembershipApplicationDto reject(@PathVariable Long id) {
+        return service.reject(id);
+    }
 }

@@ -1,5 +1,7 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.dto.UserDto;
+import ASSRONE.backend.mapper.UserMapper;
 import ASSRONE.backend.repository.UserInfoRepository;
 import org.jspecify.annotations.NullMarked;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,6 +11,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -16,11 +19,13 @@ public class UserInfoService implements UserDetailsService {
 
     private final UserInfoRepository repository;
     private final PasswordEncoder encoder;
+    private final UserMapper userMapper;
 
     @Autowired
-    public UserInfoService(UserInfoRepository repository, PasswordEncoder encoder) {
+    public UserInfoService(UserInfoRepository repository, PasswordEncoder encoder, UserMapper userMapper) {
         this.repository = repository;
         this.encoder = encoder;
+        this.userMapper = userMapper;
     }
 
     // Method to load user details by username (email)
@@ -45,5 +50,9 @@ public class UserInfoService implements UserDetailsService {
         userInfo.setPassword(encoder.encode(userInfo.getPassword()));
         repository.save(userInfo);
         return "User added successfully!";
+    }
+
+    public List<UserDto> getAll() {
+        return repository.findAll().stream().map(userMapper::toDto).toList();
     }
 }
