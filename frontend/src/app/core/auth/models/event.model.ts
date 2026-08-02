@@ -22,3 +22,8 @@ export interface CreateEventRequest {
   location: string;
   maxParticipants: number;
 }
+
+export interface EventRegistrationRequest {
+  fullName: string;
+  email: string;
+}

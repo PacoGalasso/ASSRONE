@@ -2,7 +2,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import {CreateEventRequest, EventItem} from '../models/event.model';
+import {CreateEventRequest, EventItem, EventRegistrationRequest} from '../models/event.model';
 
 @Injectable({ providedIn: 'root' })
 export class EventService {
@@ -19,5 +19,9 @@ export class EventService {
 
   create(request: CreateEventRequest): Observable<EventItem> {
     return this.http.post<EventItem>(this.baseUrl, request);
+  }
+
+  register(eventId: number, request: EventRegistrationRequest): Observable<EventItem> {
+    return this.http.post<EventItem>(`${this.baseUrl}/${eventId}/register`, request);
   }
 }
