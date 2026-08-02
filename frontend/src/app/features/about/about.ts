@@ -33,17 +33,18 @@ export class About {
   ];
 
   protected readonly president = {
-    name: 'Dr. Marie Dubois',
+    name: 'Béatrice Amoroso Galasso',
     role: 'Présidente',
-    specialty: 'Neurosciences cognitives',
-    bio: "Docteure en neurosciences avec 15 ans d'expérience en recherche et formation.",
-    initials: 'MD',
+    initials: 'BA',
   };
 
   protected readonly team = [
-    {name: 'Pierre Martin', role: 'Vice-président', specialty: 'Pédagogie différenciée', initials: 'PM'},
-    {name: 'Sophie Laurent', role: 'Secrétaire générale', specialty: "Psychologie de l'apprentissage", initials: 'SL'},
-    {name: 'Thomas Bernard', role: 'Trésorier', specialty: 'Gestion associative', initials: 'TB'},
+    {name: 'Helena Da Silva', role: 'Vice-présidente', initials: 'HD'},
+    {name: 'Candice Floch', role: 'Co-secrétaire', initials: 'CF'},
+    {name: 'Amélie Gautier Meynier', role: 'Co-secrétaire', initials: 'AG'},
+    {name: 'Sandra Schaller', role: 'Trésorière', initials: 'SS'},
+    {name: 'Isabelle Santarelli', role: 'Membre du Comité', initials: 'IS'},
+    {name: 'Poste à pourvoir', role: 'Membre du Comité', initials: '—'},
   ];
 
   protected readonly commitments = [
