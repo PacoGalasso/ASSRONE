@@ -16,10 +16,12 @@ public class MembershipApplicationService {
 
     private final MembershipApplicationRepository repository;
     private final MembershipApplicationMapper mapper;
+    private final MembershipEmailService membershipEmailService;
 
     public MembershipApplicationDto submit(CreateMembershipApplicationRequest request) {
         MembershipApplication entity = mapper.fromCreateRequest(request);
         MembershipApplication saved = repository.save(entity);
+        membershipEmailService.sendApplicationNotification(saved);
         return mapper.toDto(saved);
     }
 

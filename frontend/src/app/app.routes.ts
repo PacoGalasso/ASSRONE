@@ -1,5 +1,6 @@
 import {Routes} from '@angular/router';
 import {authGuard} from './core/auth/guards/auth.guard';
+import {adminGuard} from './core/auth/guards/admin.guard';
 
 export const routes: Routes = [
   // ===== PUBLIC ROUTES (sans AppShell) =====
@@ -78,13 +79,14 @@ export const routes: Routes = [
       },
       {
         path: 'events/create',
+        canActivate: [adminGuard],
         loadComponent: () => import('./features/create-event/create-event').then(m => m.CreateEvent)
       },
 
       // ===== ADMIN ROUTES =====
       {
         path: 'admin',
-        canActivate: [authGuard], // Ajouter adminGuard si nécessaire
+        canActivate: [adminGuard],
         children: [
           {
             path: 'documents',
