@@ -79,10 +79,8 @@ export class Statutes {
           number: 7,
           text: "L'Association est composée de :",
           items: [
-            "Membres individuel-les actifs ou actives (personnes physiques impliquées dans la neuropédagogie).",
-            "Membres individuel-le-s de soutien (personnes physiques soutenant les activités de l'Association).",
-            "Membres collectifs actifs (personnes morales impliquées dans la neuropédagogie).",
-            "Membres collectifs de soutien (personnes morales soutenant les activités de l'Association).",
+            "Membres individuel-les (personnes physiques).",
+            "Membres collectifs (personnes morales).",
           ],
         },
         {
@@ -165,7 +163,7 @@ export class Statutes {
         },
         {
           number: 20,
-          text: "Le Comité se compose de quatre à onze membres, dont un Président ou une Présidente, un Vice-président ou une Vice-Présidente, un-e secrétaire et un trésorier ou trésorière nommé-e-s pour deux ans par l'Assemblée générale et rééligibles. L'élection se fait à la majorité absolue au premier tour, à la majorité simple au second tour. Le scrutin est secret si un ou une membre de l'Assemblée générale le demande. Les fonctions sont réalisées à titre gracieux.",
+          text: "Le Comité se compose de quatre à sept membres, dont un Président ou une Présidente, un Vice-président ou une Vice-Présidente, un-e secrétaire et un trésorier ou trésorière nommé-e-s pour deux ans par l'Assemblée générale et rééligibles. L'élection se fait à la majorité absolue au premier tour, à la majorité simple au second tour. Le scrutin est secret si un ou une membre de l'Assemblée générale le demande. Les fonctions sont réalisées à titre gracieux.",
         },
         {
           number: 21,
@@ -206,6 +204,11 @@ export class Statutes {
         },
       ],
     },
+  ];
+  protected readonly adoptionNote = "Les présents statuts ont été modifiés et adoptés par l'assemblée générale du 16 juin 2026 par sondage";
+  protected readonly signatories = [
+    {name: 'AMOROSO Béatrice', role: 'Président-e'},
+    {name: 'DA SILVA Helena', role: 'Vice-président-e'},
   ];
   private document = inject(DOCUMENT);
 
