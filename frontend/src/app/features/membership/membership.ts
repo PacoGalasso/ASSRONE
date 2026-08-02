@@ -28,10 +28,8 @@ export class Membership {
   ];
 
   protected readonly plans = [
-    { title: 'Membre individuel·le actif·ve', price: '50', description: 'Personnes physiques impliquées dans la neuropédagogie' },
-    { title: 'Membre individuel·le de soutien', price: '30', description: "Personnes physiques soutenant les activités de l'association" },
-    { title: 'Membre collectif actif', price: '150', description: 'Personnes morales impliquées dans la neuropédagogie' },
-    { title: 'Membre collectif de soutien', price: '100', description: "Personnes morales soutenant les activités de l'association" },
+    { title: 'Membre individuel·le', price: '50', description: 'Personnes physiques impliquées dans la neuropédagogie' },
+    { title: 'Membre collectif', price: '150', description: 'Personnes morales impliquées dans la neuropédagogie' },
   ];
 
   protected readonly steps = [

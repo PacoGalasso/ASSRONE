@@ -22,7 +22,7 @@ export class Apply {
     fullName: ['', Validators.required],
     email: ['', [Validators.required, Validators.email]],
     phone: [''],
-    membershipType: ['INDIVIDUEL_ACTIF' as const, Validators.required],
+    membershipType: ['INDIVIDUEL' as const, Validators.required],
     message: [''],
     charterAccepted: [false, Validators.requiredTrue],
   });

@@ -1,5 +1,5 @@
 // features/membership/membership-application.model.ts
-export type MembershipType = 'INDIVIDUEL_ACTIF' | 'INDIVIDUEL_SOUTIEN' | 'COLLECTIF_ACTIF' | 'COLLECTIF_SOUTIEN';
+export type MembershipType = 'INDIVIDUEL' | 'COLLECTIF';
 
 export interface CreateMembershipApplicationRequest {
   fullName: string;
