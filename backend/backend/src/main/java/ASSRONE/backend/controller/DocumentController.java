@@ -48,4 +48,10 @@ public class DocumentController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + document.getOriginalFilename() + "\"")
                 .body(resource);
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) throws IOException {
+        documentService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

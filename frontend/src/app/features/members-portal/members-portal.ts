@@ -20,6 +20,7 @@ export class MembersPortal implements OnInit {
   selectedFile = signal<File | null>(null);
   errorMessage = signal<string | null>(null);
   downloadingId = signal<number | null>(null);
+  deletingId = signal<number | null>(null);
   private documentService = inject(DocumentService);
   private authService = inject(AuthService);
   private fb = inject(FormBuilder);
@@ -89,6 +90,21 @@ export class MembersPortal implements OnInit {
         this.downloadingId.set(null);
       },
       error: () => this.downloadingId.set(null),
+    });
+  }
+
+  onDelete(doc: DocumentItem): void {
+    if (!confirm(`Supprimer le document "${doc.title}" ? Cette action est irréversible.`)) {
+      return;
+    }
+
+    this.deletingId.set(doc.id);
+    this.documentService.delete(doc.id).subscribe({
+      next: () => {
+        this.documents.update(list => list.filter(d => d.id !== doc.id));
+        this.deletingId.set(null);
+      },
+      error: () => this.deletingId.set(null),
     });
   }
 

@@ -11,6 +11,27 @@
       depuis {{ profile()?.createdAt | date:'MMMM yyyy' }}
     </p>
 
+    <!-- Photo de profil -->
+    <section class="mb-14 flex items-center gap-6">
+      @if (avatarUrl()) {
+        <img [src]="avatarUrl()" alt="Photo de profil"
+             class="w-20 h-20 rounded-full object-cover ring-2 ring-[#E3E1DC]"/>
+      } @else {
+        <div class="w-20 h-20 rounded-full bg-[#122347] text-white flex items-center justify-center font-display text-xl font-semibold">
+          {{ initials() }}
+        </div>
+      }
+      <div>
+        <label class="inline-block cursor-pointer text-sm font-semibold text-[#AD7A26] hover:text-[#122347] transition-colors">
+          {{ uploadingAvatar() ? 'Envoi...' : 'Changer la photo' }}
+          <input type="file" accept="image/*" (change)="onAvatarSelected($event)" [disabled]="uploadingAvatar()" class="hidden"/>
+        </label>
+        @if (avatarError()) {
+          <p class="text-sm text-red-600 mt-1">{{ avatarError() }}</p>
+        }
+      </div>
+    </section>
+
     <!-- Infos -->
     <section class="mb-14">
       <h2 class="font-semibold text-[#122347] mb-6 pb-3 border-b border-[#E3E1DC]">Informations</h2>

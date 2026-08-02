@@ -59,9 +59,14 @@
         @if (isLoggedIn()) {
           <div class="relative">
             <button (click)="toggleProfile($event)" type="button" class="relative flex-shrink-0">
-              <img
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=facearea&w=256&h=256"
-                alt="Profile" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full ring-2 ring-line"/>
+              @if (avatarUrl()) {
+                <img [src]="avatarUrl()" alt="Profil"
+                     class="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover ring-2 ring-line"/>
+              } @else {
+                <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-navy text-white flex items-center justify-center text-xs sm:text-sm font-semibold ring-2 ring-line">
+                  {{ initials() }}
+                </div>
+              }
             </button>
 
             @if (isProfileOpen()) {
