@@ -1,0 +1,94 @@
+<!-- features/membership/apply/apply.html -->
+<section class="max-w-2xl mx-auto px-6 py-16">
+
+  @if (!submitted()) {
+    <a routerLink="/membership" class="text-sm font-medium text-[#AD7A26] hover:text-[#122347] transition-colors">
+      ← Retour à l'adhésion
+    </a>
+
+    <h1 class="font-display text-3xl font-semibold text-[#122347] mt-6 mb-2">Demande d'adhésion</h1>
+    <p class="text-[#5C5F66] mb-10">Soumettez votre demande d'adhésion au Comité — quelques minutes suffisent.</p>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="flex flex-col gap-6">
+
+      <div>
+        <label class="block text-sm font-medium text-[#122347] mb-1.5">Nom complet</label>
+        <input type="text" formControlName="fullName"
+               class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+        @if (form.controls.fullName.invalid && form.controls.fullName.touched) {
+          <p class="text-sm text-red-600 mt-1">Le nom est obligatoire.</p>
+        }
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Email</label>
+          <input type="email" formControlName="email"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+          @if (form.controls.email.invalid && form.controls.email.touched) {
+            <p class="text-sm text-red-600 mt-1">Email valide requis.</p>
+          }
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-[#122347] mb-1.5">Téléphone (optionnel)</label>
+          <input type="tel" formControlName="phone"
+                 class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-[#122347] mb-1.5">Type de membre</label>
+        <select formControlName="membershipType"
+                class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]">
+          <option value="INDIVIDUEL_ACTIF">Membre individuel·le actif·ve — CHF 50.-/an</option>
+          <option value="INDIVIDUEL_SOUTIEN">Membre individuel·le de soutien — CHF 30.-/an</option>
+          <option value="COLLECTIF_ACTIF">Membre collectif actif — CHF 150.-/an</option>
+          <option value="COLLECTIF_SOUTIEN">Membre collectif de soutien — CHF 100.-/an</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-[#122347] mb-1.5">Message (optionnel)</label>
+        <textarea formControlName="message" rows="3"
+                  class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"></textarea>
+      </div>
+
+      <label class="flex items-start gap-3">
+        <input type="checkbox" formControlName="charterAccepted" class="mt-1"/>
+        <span class="text-sm text-[#5C5F66]">
+          J'ai pris connaissance et j'accepte la <a routerLink="/charter"
+                                                    class="text-[#AD7A26] font-medium hover:underline">charte de l'association</a>.
+        </span>
+      </label>
+      @if (form.controls.charterAccepted.invalid && form.controls.charterAccepted.touched) {
+        <p class="text-sm text-red-600 -mt-4">Vous devez accepter la charte pour continuer.</p>
+      }
+
+      @if (errorMessage()) {
+        <p class="text-sm text-red-600">{{ errorMessage() }}</p>
+      }
+
+      <button type="submit" [disabled]="submitting()"
+              class="bg-[#122347] text-white rounded-md py-3 font-medium hover:bg-[#1E3A6E] transition-colors disabled:opacity-50">
+        {{ submitting() ? 'Envoi...' : 'Soumettre ma demande' }}
+      </button>
+    </form>
+  } @else {
+    <div class="text-center py-16">
+      <div class="w-16 h-16 rounded-full bg-[#122347] text-white flex items-center justify-center mx-auto mb-6">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             class="h-8 w-8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+        </svg>
+      </div>
+      <h1 class="font-display text-2xl font-semibold text-[#122347] mb-2">Demande envoyée</h1>
+      <p class="text-[#5C5F66] max-w-md mx-auto mb-8">
+        Votre demande d'adhésion a été transmise au Comité. Vous recevrez vos identifiants d'accès une fois votre
+        dossier validé.
+      </p>
+      <a routerLink="/" class="text-sm font-semibold text-[#AD7A26] hover:text-[#122347] transition-colors">
+        Retour à l'accueil →
+      </a>
+    </div>
+  }
+</section>

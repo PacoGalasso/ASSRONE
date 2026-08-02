@@ -1,0 +1,78 @@
+<!-- features/events/create-event/create-event.html -->
+<section class="max-w-2xl mx-auto px-6 py-16">
+  <a routerLink="/events" class="text-sm font-medium text-[#AD7A26] hover:text-[#122347] transition-colors">
+    ← Retour aux événements
+  </a>
+
+  <h1 class="font-display text-3xl font-semibold text-[#122347] mt-6 mb-10">Créer un événement</h1>
+
+  <form [formGroup]="form" (ngSubmit)="onSubmit()" class="flex flex-col gap-6">
+
+    <div>
+      <label class="block text-sm font-medium text-[#122347] mb-1.5">Titre</label>
+      <input type="text" formControlName="title"
+             class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]" />
+      @if (form.controls.title.invalid && form.controls.title.touched) {
+        <p class="text-sm text-red-600 mt-1">Le titre est obligatoire.</p>
+      }
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-[#122347] mb-1.5">Description</label>
+      <textarea formControlName="description" rows="3"
+                class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"></textarea>
+      @if (form.controls.description.invalid && form.controls.description.touched) {
+        <p class="text-sm text-red-600 mt-1">La description est obligatoire.</p>
+      }
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-[#122347] mb-1.5">Type</label>
+      <select formControlName="type"
+              class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]">
+        <option value="FORMATION">Formation</option>
+        <option value="WEBINAIRE">Webinaire</option>
+        <option value="ATELIER">Atelier</option>
+      </select>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-[#122347] mb-1.5">Date</label>
+        <input type="date" formControlName="eventDate"
+               class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-[#122347] mb-1.5">Heure de début</label>
+        <input type="time" formControlName="startTime"
+               class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-[#122347] mb-1.5">Heure de fin</label>
+        <input type="time" formControlName="endTime"
+               class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]" />
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-[#122347] mb-1.5">Lieu</label>
+      <input type="text" formControlName="location"
+             class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]" />
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-[#122347] mb-1.5">Nombre de places</label>
+      <input type="number" formControlName="maxParticipants" min="1"
+             class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]" />
+    </div>
+
+    @if (errorMessage()) {
+      <p class="text-sm text-red-600">{{ errorMessage() }}</p>
+    }
+
+    <button type="submit" [disabled]="submitting()"
+            class="bg-[#122347] text-white rounded-md py-3 font-medium hover:bg-[#1E3A6E] transition-colors disabled:opacity-50">
+      {{ submitting() ? 'Création...' : "Créer l'événement" }}
+    </button>
+  </form>
+</section>

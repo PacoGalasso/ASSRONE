@@ -1,0 +1,115 @@
+<!-- features/membership/membership.html -->
+
+<!-- HERO — texture, pas de photo -->
+<header class="relative overflow-hidden bg-navy">
+  <svg class="absolute inset-0 w-full h-full opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="grid-membership" width="40" height="40" patternUnits="userSpaceOnUse">
+        <circle cx="2" cy="2" r="1.5" fill="white"/>
+      </pattern>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grid-membership)"/>
+  </svg>
+
+  <div class="relative max-w-3xl mx-auto px-6 py-24 text-center">
+    <p class="text-sm font-semibold tracking-widest uppercase text-gold-light mb-5">Adhésion</p>
+    <h1 class="font-display text-4xl md:text-5xl font-semibold text-white leading-tight mb-6">
+      Rejoignez un réseau engagé pour faire avancer la neuropédagogie.
+    </h1>
+    <p class="text-lg text-white/75 leading-relaxed">
+      Adhérer à ASSRONE, c'est participer à une dynamique collective, partager des valeurs fortes et contribuer
+      activement au développement et à la reconnaissance de la neuropédagogie en Suisse romande.
+    </p>
+  </div>
+</header>
+
+<!-- POURQUOI NOUS REJOINDRE -->
+<section class="bg-white border-y border-line">
+  <div class="max-w-5xl mx-auto px-6 py-20">
+    <div class="text-center mb-14">
+      <p class="text-sm font-semibold tracking-widest uppercase text-gold mb-4">Découvrir les avantages</p>
+      <h2 class="font-display text-3xl font-semibold text-navy">Pourquoi nous rejoindre ?</h2>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-line border-y border-line">
+      @for (benefit of benefits; track benefit.title) {
+        <div class="p-8 text-center md:text-left">
+          <h3 class="font-display text-lg font-semibold text-navy mb-3">{{ benefit.title }}</h3>
+          <p class="text-ink-muted leading-relaxed">{{ benefit.description }}</p>
+        </div>
+      }
+    </div>
+  </div>
+</section>
+
+<!-- TARIFS -->
+<section id="tarifs" class="max-w-5xl mx-auto px-6 py-20">
+  <div class="text-center mb-14">
+    <p class="text-sm font-semibold tracking-widest uppercase text-gold mb-4">Consulter les formules</p>
+    <h2 class="font-display text-3xl font-semibold text-navy">Nos options de cotisations et tarifs</h2>
+    <p class="text-ink-muted mt-3">Des formules adaptées à chaque engagement</p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 border-t border-l border-line">
+    @for (plan of plans; track plan.title) {
+      <div class="border-r border-b border-line p-8">
+        <div class="flex items-baseline gap-2 mb-3">
+          <span class="font-display text-4xl font-semibold text-navy">{{ plan.price }}</span>
+          <span class="text-ink-muted">CHF / an</span>
+        </div>
+        <h3 class="font-semibold text-navy mb-2">{{ plan.title }}</h3>
+        <p class="text-sm text-ink-muted leading-relaxed">{{ plan.description }}</p>
+      </div>
+    }
+  </div>
+</section>
+
+<!-- ENVIE DE FAIRE PARTIE DE L'AVENTURE — texture, pas de photo -->
+<section class="relative overflow-hidden bg-navy">
+  <svg class="absolute inset-0 w-full h-full opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100%" height="100%" fill="url(#grid-membership)"/>
+  </svg>
+  <div class="relative max-w-3xl mx-auto px-6 py-20 text-center">
+    <h2 class="font-display text-3xl md:text-4xl font-semibold text-white mb-4">Faire avancer la neuropédagogie,
+      ensemble</h2>
+    <p class="text-white/75 max-w-xl mx-auto mb-9">Envie de faire partie de l'aventure ?</p>
+    <a href="javascript:void(0)" (click)="scrollToId('comment-adherer', $event)"
+       class="inline-block bg-gold-light text-navy px-8 py-4 rounded-md font-semibold hover:bg-gold transition-colors">
+      Rejoindre l'association
+    </a>
+  </div>
+</section>
+
+<!-- COMMENT ADHÉRER -->
+<section id="comment-adherer" class="max-w-4xl mx-auto px-6 py-20">
+  <div class="text-center mb-16">
+    <p class="text-sm font-semibold tracking-widest uppercase text-gold mb-4">Commencer mon adhésion</p>
+    <h2 class="font-display text-3xl font-semibold text-navy">Adhérer en toute simplicité</h2>
+  </div>
+
+  <div class="flex flex-col">
+    @for (step of steps; track step.title; let i = $index; let last = $last) {
+      <div class="flex gap-6">
+        <div class="flex flex-col items-center">
+          <div
+            class="w-10 h-10 rounded-full border-2 border-navy text-navy font-display font-semibold flex items-center justify-center flex-shrink-0">
+            {{ i + 1 }}
+          </div>
+          @if (!last) {
+            <div class="w-px flex-1 bg-line my-2"></div>
+          }
+        </div>
+        <div class="pb-10">
+          <h3 class="font-semibold text-navy mb-1.5 text-lg">{{ step.title }}</h3>
+          <p class="text-ink-muted leading-relaxed">{{ step.description }}</p>
+          @if (step.link) {
+            <a [routerLink]="step.link.route"
+               class="inline-block mt-2 text-sm font-semibold text-gold hover:text-navy transition-colors">
+              {{ step.link.label }} →
+            </a>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</section>

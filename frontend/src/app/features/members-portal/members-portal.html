@@ -1,0 +1,90 @@
+<!-- features/members-portal/members-portal.html -->
+<div class="max-w-4xl mx-auto px-6 py-16">
+
+  <div class="flex items-center justify-between mb-2">
+    <h1 class="font-display text-3xl font-semibold text-[#122347]">Espace membres</h1>
+    @if (isAdmin()) {
+      <a routerLink="/events/create"
+         class="text-sm font-semibold text-[#AD7A26] hover:text-[#122347] transition-colors">
+        + Créer un événement
+      </a>
+    }
+  </div>
+  <p class="text-[#5C5F66] mb-10">Consultez les documents partagés par le Comité.</p>
+
+  @if (isAdmin()) {
+    <div class="mb-10">
+      @if (!showUploadForm()) {
+        <button (click)="showUploadForm.set(true)" type="button"
+                class="bg-[#122347] text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-[#1E3A6E] transition-colors">
+          + Ajouter un document
+        </button>
+      } @else {
+        <div class="border border-[#E3E1DC] rounded-xl p-6 bg-[#F7F6F3]">
+          <h3 class="font-semibold text-[#122347] mb-4">Nouveau document</h3>
+          <form [formGroup]="uploadForm" (ngSubmit)="onUpload()" class="flex flex-col gap-4">
+            <div>
+              <label class="block text-sm font-medium text-[#122347] mb-1.5">Titre</label>
+              <input type="text" formControlName="title"
+                     class="w-full border border-[#E3E1DC] rounded-md px-3 py-2 bg-white focus:outline-none focus:border-[#122347]" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-[#122347] mb-1.5">Description (optionnel)</label>
+              <textarea formControlName="description" rows="2"
+                        class="w-full border border-[#E3E1DC] rounded-md px-3 py-2 bg-white focus:outline-none focus:border-[#122347]"></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-[#122347] mb-1.5">Fichier</label>
+              <input type="file" (change)="onFileSelected($event)"
+                     class="w-full text-sm text-[#5C5F66]" />
+            </div>
+
+            @if (errorMessage()) {
+              <p class="text-sm text-red-600">{{ errorMessage() }}</p>
+            }
+
+            <div class="flex gap-3">
+              <button type="submit" [disabled]="uploading()"
+                      class="bg-[#122347] text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-[#1E3A6E] transition-colors disabled:opacity-50">
+                {{ uploading() ? 'Envoi...' : 'Envoyer' }}
+              </button>
+              <button type="button" (click)="showUploadForm.set(false)"
+                      class="px-5 py-2.5 rounded-md text-sm font-medium text-[#5C5F66] hover:text-[#122347] transition-colors">
+                Annuler
+              </button>
+            </div>
+          </form>
+        </div>
+      }
+    </div>
+  }
+
+  @if (loading()) {
+    <p class="text-[#5C5F66]">Chargement des documents...</p>
+  } @else if (documents().length === 0) {
+    <div class="border border-dashed border-[#E3E1DC] rounded-xl p-10 text-center">
+      <p class="font-medium text-[#122347] mb-1">Aucun document pour le moment</p>
+      <p class="text-sm text-[#5C5F66]">Les documents partagés par le Comité apparaîtront ici.</p>
+    </div>
+  } @else {
+    <div class="flex flex-col divide-y divide-[#E3E1DC] border-y border-[#E3E1DC]">
+      @for (doc of documents(); track doc.id) {
+        <div class="flex items-center justify-between gap-4 py-5">
+          <div>
+            <h3 class="font-semibold text-[#122347]">{{ doc.title }}</h3>
+            @if (doc.description) {
+              <p class="text-sm text-[#5C5F66] mt-0.5">{{ doc.description }}</p>
+            }
+            <p class="text-xs text-[#8A8A8A] mt-1">
+              {{ doc.originalFilename }} · {{ formatSize(doc.fileSize) }} · ajouté par {{ doc.uploadedBy }}
+            </p>
+          </div>
+          <button (click)="onDownload(doc)" [disabled]="downloadingId() === doc.id" type="button"
+                  class="flex-shrink-0 text-sm font-semibold text-[#AD7A26] hover:text-[#122347] transition-colors disabled:opacity-50">
+            {{ downloadingId() === doc.id ? 'Téléchargement...' : 'Télécharger' }}
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>
