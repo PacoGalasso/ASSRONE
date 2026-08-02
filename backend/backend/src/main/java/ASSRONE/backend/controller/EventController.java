@@ -40,4 +40,10 @@ public class EventController {
     public EventDto register(@PathVariable Long id, @Valid @RequestBody EventRegistrationRequest request) {
         return eventService.register(id, request);
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        eventService.deleteEvent(id);
+        return ResponseEntity.noContent().build();
+    }
 }

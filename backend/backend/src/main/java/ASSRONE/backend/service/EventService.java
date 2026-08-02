@@ -57,4 +57,11 @@ public class EventService {
 
         return eventMapper.toDto(saved);
     }
+
+    public void deleteEvent(Long id) {
+        if (!eventRepository.existsById(id)) {
+            throw new IllegalArgumentException("Événement introuvable : " + id);
+        }
+        eventRepository.deleteById(id);
+    }
 }
