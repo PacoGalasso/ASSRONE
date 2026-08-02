@@ -42,20 +42,30 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 // Token expiré ou invalide : cas normal, on laisse la requête continuer
                 // sans authentification — Spring Security renverra 401/403 proprement,
                 // que le front pourra intercepter pour déclencher un refresh token.
-                logger.debug("Token JWT invalide ou expiré : " + expiredOrInvalidToken.getMessage());
+                logger.warn("[JWT DEBUG] " + request.getRequestURI() + " -> extractUsername a échoué : " + expiredOrInvalidToken.getMessage());
             }
+        } else {
+            logger.warn("[JWT DEBUG] " + request.getRequestURI() + " -> pas d'en-tête Authorization Bearer (header brut = " + authHeader + ")");
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            if (jwtService.validateToken(token, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities());
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+            try {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                boolean valid = jwtService.validateToken(token, userDetails);
+                logger.warn("[JWT DEBUG] " + request.getRequestURI() + " -> username=" + username + " userDetails.username=" + userDetails.getUsername() + " valid=" + valid);
+                if (valid) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
+            } catch (RuntimeException ex) {
+                logger.warn("[JWT DEBUG] " + request.getRequestURI() + " -> échec loadUserByUsername/validateToken pour '" + username + "' : " + ex);
             }
+        } else if (username != null) {
+            logger.warn("[JWT DEBUG] " + request.getRequestURI() + " -> username=" + username + " mais un Authentication existait déjà en contexte");
         }
 
         filterChain.doFilter(request, response);
