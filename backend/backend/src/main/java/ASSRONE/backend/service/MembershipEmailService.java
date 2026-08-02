@@ -34,4 +34,34 @@ public class MembershipEmailService {
         );
         mailSender.send(email);
     }
+
+    public void sendApplicationConfirmation(MembershipApplication application) {
+        SimpleMailMessage email = new SimpleMailMessage();
+        email.setFrom(fromAddress);
+        email.setTo(application.getEmail());
+        email.setSubject("Votre demande d'adhésion à ASSRONE a bien été reçue");
+        email.setText(
+                "Bonjour " + application.getFullName() + ",\n\n"
+                        + "Nous avons bien reçu votre demande d'adhésion à ASSRONE. Le Comité va l'examiner et vous recontactera prochainement.\n\n"
+                        + "À bientôt,\nL'équipe ASSRONE"
+        );
+        mailSender.send(email);
+    }
+
+    public void sendAccountCreated(MembershipApplication application, String rawPassword) {
+        SimpleMailMessage email = new SimpleMailMessage();
+        email.setFrom(fromAddress);
+        email.setTo(application.getEmail());
+        email.setSubject("Bienvenue à ASSRONE — vos identifiants de connexion");
+        email.setText(
+                "Bonjour " + application.getFullName() + ",\n\n"
+                        + "Votre demande d'adhésion à ASSRONE a été acceptée. Voici vos identifiants de connexion :\n\n"
+                        + "Email : " + application.getEmail() + "\n"
+                        + "Mot de passe temporaire : " + rawPassword + "\n\n"
+                        + "Vous pourrez modifier ce mot de passe depuis votre profil après connexion.\n\n"
+                        + "Le paiement de la cotisation annuelle se fait sur facture, qui vous sera envoyée séparément.\n\n"
+                        + "Bienvenue parmi nous,\nL'équipe ASSRONE"
+        );
+        mailSender.send(email);
+    }
 }

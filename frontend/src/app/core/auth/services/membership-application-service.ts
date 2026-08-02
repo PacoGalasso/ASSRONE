@@ -13,4 +13,16 @@ export class MembershipApplicationService {
   submit(request: CreateMembershipApplicationRequest): Observable<MembershipApplicationDto> {
     return this.http.post<MembershipApplicationDto>(this.baseUrl, request);
   }
+
+  getAll(): Observable<MembershipApplicationDto[]> {
+    return this.http.get<MembershipApplicationDto[]>(this.baseUrl);
+  }
+
+  accept(id: number): Observable<MembershipApplicationDto> {
+    return this.http.post<MembershipApplicationDto>(`${this.baseUrl}/${id}/accept`, {});
+  }
+
+  reject(id: number): Observable<MembershipApplicationDto> {
+    return this.http.post<MembershipApplicationDto>(`${this.baseUrl}/${id}/reject`, {});
+  }
 }

@@ -82,6 +82,11 @@ export const routes: Routes = [
         canActivate: [adminGuard],
         loadComponent: () => import('./features/create-event/create-event').then(m => m.CreateEvent)
       },
+      {
+        path: 'admin/membership',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./features/admin-membership/admin-membership').then(m => m.AdminMembership)
+      },
     ]
   },
 
