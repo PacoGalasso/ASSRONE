@@ -205,7 +205,7 @@ export class Statutes {
       ],
     },
   ];
-  protected readonly adoptionNote = "Les présents statuts ont été modifiés et adoptés par l'assemblée générale extraordinaire du 16 juin 2026 par sondage sur le groupe WhatsApp COMITE ASSRONE et membres.";
+  protected readonly adoptionNote = "Les présents statuts ont été modifiés et adoptés par l'assemblée générale du 16 juin 2026 par sondage";
   protected readonly signatories = [
     {name: 'AMOROSO Béatrice', role: 'Président-e'},
     {name: 'DA SILVA Helena', role: 'Vice-président-e'},
