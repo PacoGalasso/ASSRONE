@@ -1,9 +1,12 @@
 package ASSRONE.backend.controller;
 
 import ASSRONE.backend.config.JwtAuthenticationEntryPoint;
+import ASSRONE.backend.config.RateLimitConfig;
 import ASSRONE.backend.config.SecurityConfig;
 import ASSRONE.backend.dto.UserProfileDto;
 import ASSRONE.backend.filter.JwtAuthFilter;
+import ASSRONE.backend.filter.RateLimitFilter;
+import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.UserProfileService;
 import org.junit.jupiter.api.Test;
@@ -38,7 +41,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({
         SecurityConfig.class,
         JwtAuthFilter.class,
-        JwtAuthenticationEntryPoint.class
+        JwtAuthenticationEntryPoint.class,
+        RateLimitFilter.class,
+        RateLimiterService.class,
+        RateLimitConfig.class
 })
 class ProfileControllerSecurityTest {
 
