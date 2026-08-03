@@ -1,5 +1,6 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.event.MembershipApplicationSubmittedEvent;
 import ASSRONE.backend.model.MembershipApplication;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,33 +20,31 @@ public class MembershipEmailService {
     @Value("${spring.mail.username}")
     private String fromAddress;
 
-    public void sendApplicationNotification(MembershipApplication application) {
-        SimpleMailMessage email = new SimpleMailMessage();
-        email.setFrom(fromAddress);
-        email.setTo(recipient);
-        email.setReplyTo(application.getEmail());
-        email.setSubject("[Adhésion ASSRONE] Nouvelle demande de " + application.getFullName());
-        email.setText(
-                "Nom : " + application.getFullName() + "\n"
-                        + "Email : " + application.getEmail() + "\n"
-                        + "Téléphone : " + (application.getPhone() != null ? application.getPhone() : "-") + "\n"
-                        + "Type de membre : " + application.getMembershipType() + "\n\n"
-                        + "Message :\n" + (application.getMessage() != null ? application.getMessage() : "-")
+    public void sendApplicationSubmittedEmails(MembershipApplicationSubmittedEvent event) {
+        SimpleMailMessage toAssociation = new SimpleMailMessage();
+        toAssociation.setFrom(fromAddress);
+        toAssociation.setTo(recipient);
+        toAssociation.setReplyTo(event.email());
+        toAssociation.setSubject("[Adhésion ASSRONE] Nouvelle demande de " + event.fullName());
+        toAssociation.setText(
+                "Nom : " + event.fullName() + "\n"
+                        + "Email : " + event.email() + "\n"
+                        + "Téléphone : " + (event.phone() != null ? event.phone() : "-") + "\n"
+                        + "Type de membre : " + event.membershipType() + "\n\n"
+                        + "Message :\n" + (event.message() != null ? event.message() : "-")
         );
-        mailSender.send(email);
-    }
+        mailSender.send(toAssociation);
 
-    public void sendApplicationConfirmation(MembershipApplication application) {
-        SimpleMailMessage email = new SimpleMailMessage();
-        email.setFrom(fromAddress);
-        email.setTo(application.getEmail());
-        email.setSubject("Votre demande d'adhésion à ASSRONE a bien été reçue");
-        email.setText(
-                "Bonjour " + application.getFullName() + ",\n\n"
+        SimpleMailMessage toApplicant = new SimpleMailMessage();
+        toApplicant.setFrom(fromAddress);
+        toApplicant.setTo(event.email());
+        toApplicant.setSubject("Votre demande d'adhésion à ASSRONE a bien été reçue");
+        toApplicant.setText(
+                "Bonjour " + event.fullName() + ",\n\n"
                         + "Nous avons bien reçu votre demande d'adhésion à ASSRONE. Le Comité va l'examiner et vous recontactera prochainement.\n\n"
                         + "À bientôt,\nL'équipe ASSRONE"
         );
-        mailSender.send(email);
+        mailSender.send(toApplicant);
     }
 
     public void sendAccountCreated(MembershipApplication application, String rawPassword) {
