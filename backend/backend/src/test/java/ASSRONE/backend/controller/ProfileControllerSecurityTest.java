@@ -2,11 +2,13 @@ package ASSRONE.backend.controller;
 
 import ASSRONE.backend.config.JwtAuthenticationEntryPoint;
 import ASSRONE.backend.config.SecurityConfig;
+import ASSRONE.backend.dto.UserProfileDto;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.UserProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -17,16 +19,19 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.containsStringIgnoringCase;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = ProfileController.class)
@@ -42,6 +47,9 @@ class ProfileControllerSecurityTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private FilterRegistrationBean<JwtAuthFilter> jwtAuthFilterRegistration;
 
     @MockitoBean
     private UserDetailsService userDetailsService;
@@ -74,5 +82,34 @@ class ProfileControllerSecurityTest {
                 .andExpect(content().string(not(containsStringIgnoringCase("isActive"))));
 
         verify(userProfileService, never()).getProfile(anyString());
+    }
+
+    @Test
+    void jwtValideAvecCompteActifAccedeAuProfil() throws Exception {
+        UserDetails activeUser = userDetailsMock(true);
+        when(jwtService.extractUsername(TOKEN)).thenReturn(EMAIL);
+        when(userDetailsService.loadUserByUsername(EMAIL)).thenReturn(activeUser);
+        when(jwtService.validateToken(TOKEN, activeUser)).thenReturn(true);
+        when(userProfileService.getProfile(EMAIL)).thenReturn(
+                UserProfileDto.builder()
+                        .id(1L)
+                        .email(EMAIL)
+                        .username("membre")
+                        .firstName("Jean")
+                        .lastName("Dupont")
+                        .role("USER")
+                        .build());
+
+        mockMvc.perform(get("/api/profile").header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(EMAIL))
+                .andExpect(jsonPath("$.username").value("membre"));
+
+        verify(userProfileService, times(1)).getProfile(EMAIL);
+    }
+
+    @Test
+    void enregistrementServletDuFiltreEstDesactive() {
+        assertThat(jwtAuthFilterRegistration.isEnabled()).isFalse();
     }
 }
