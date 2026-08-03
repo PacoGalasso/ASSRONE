@@ -29,4 +29,22 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).containsExactly(Map.entry("error", "Le mot de passe actuel est incorrect"));
     }
+
+    @Test
+    void invalidAvatarRetourne400AvecUniquementLaCleError() {
+        ResponseEntity<Map<String, String>> response =
+                handler.handleInvalidAvatar(new InvalidAvatarException("Seuls les formats JPEG et PNG sont acceptés."));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).containsExactly(Map.entry("error", "Seuls les formats JPEG et PNG sont acceptés."));
+    }
+
+    @Test
+    void invalidDocumentRetourne400AvecUniquementLaCleError() {
+        ResponseEntity<Map<String, String>> response =
+                handler.handleInvalidDocument(new InvalidDocumentException("Le document doit être un fichier PDF valide."));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).containsExactly(Map.entry("error", "Le document doit être un fichier PDF valide."));
+    }
 }

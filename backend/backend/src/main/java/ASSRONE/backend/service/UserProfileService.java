@@ -8,6 +8,7 @@ import ASSRONE.backend.mapper.UserProfileMapper;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.UserInfoRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -23,6 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserProfileService {
@@ -30,6 +32,7 @@ public class UserProfileService {
     private final UserInfoRepository userRepository;
     private final UserProfileMapper userProfileMapper;
     private final PasswordEncoder passwordEncoder;
+    private final AvatarImageInspector avatarImageInspector;
 
     @Value("${app.upload-dir}")
     private String uploadDir;
@@ -61,27 +64,55 @@ public class UserProfileService {
     }
 
     public void uploadAvatar(String email, MultipartFile file) throws IOException {
+        ValidatedAvatar validatedAvatar = avatarImageInspector.inspect(file.getBytes());
+
         User user = findByEmailOrThrow(email);
+        String previousAvatarFilename = user.getAvatarFilename();
 
-        Path avatarDir = Paths.get(uploadDir, "avatars");
-        if (!Files.exists(avatarDir)) {
-            Files.createDirectories(avatarDir);
-        }
-
-        String extension = "";
-        String originalFilename = file.getOriginalFilename();
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf('.'));
-        }
-        String storedFilename = UUID.randomUUID() + extension;
-        Files.copy(file.getInputStream(), avatarDir.resolve(storedFilename));
-
-        if (user.getAvatarFilename() != null) {
-            Files.deleteIfExists(avatarDir.resolve(user.getAvatarFilename()));
-        }
+        String storedFilename = UUID.randomUUID() + validatedAvatar.format().extension();
+        Path target = resolveAvatarPath(storedFilename);
+        Files.write(target, validatedAvatar.content());
 
         user.setAvatarFilename(storedFilename);
-        userRepository.save(user);
+        try {
+            userRepository.save(user);
+        } catch (RuntimeException ex) {
+            deleteQuietly(target);
+            user.setAvatarFilename(previousAvatarFilename);
+            throw ex;
+        }
+
+        if (previousAvatarFilename != null) {
+            deleteQuietly(avatarDirectory().resolve(previousAvatarFilename));
+        }
+    }
+
+    private Path avatarDirectory() {
+        return Paths.get(uploadDir, "avatars").toAbsolutePath().normalize();
+    }
+
+    private Path resolveAvatarPath(String storedFilename) throws IOException {
+        Path root = avatarDirectory();
+        if (!Files.exists(root)) {
+            Files.createDirectories(root);
+        }
+
+        Path target = root.resolve(storedFilename).normalize();
+        if (!target.startsWith(root)) {
+            throw new IllegalStateException("Chemin d'avatar résolu hors du répertoire autorisé.");
+        }
+        return target;
+    }
+
+    private void deleteQuietly(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException ex) {
+            log.warn("Échec du nettoyage d'un fichier avatar temporaire.");
+        }
     }
 
     public Resource loadAvatar(String email) throws MalformedURLException {
