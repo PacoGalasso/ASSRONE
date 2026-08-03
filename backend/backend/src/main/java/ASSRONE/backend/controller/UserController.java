@@ -1,6 +1,7 @@
 package ASSRONE.backend.controller;
 
 import ASSRONE.backend.dto.RegisterRequest;
+import ASSRONE.backend.exception.InvalidCredentialsException;
 import ASSRONE.backend.model.AuthRequest;
 import ASSRONE.backend.model.AuthResponse;
 import ASSRONE.backend.service.JwtService;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
@@ -34,9 +36,14 @@ public class UserController {
 
     @PostMapping("/generateToken")
     public AuthResponse authenticateAndGetToken(@RequestBody AuthRequest authRequest) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword())
-        );
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword())
+            );
+        } catch (AuthenticationException ex) {
+            throw new InvalidCredentialsException("Email ou mot de passe incorrect.");
+        }
         if (authentication.isAuthenticated()) {
             String accessToken = jwtService.generateToken(authRequest.getEmail());
             String refreshToken = jwtService.generateRefreshToken(authRequest.getEmail());

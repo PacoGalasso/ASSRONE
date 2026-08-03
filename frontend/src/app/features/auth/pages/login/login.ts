@@ -37,7 +37,7 @@ export class Login implements OnInit {
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {
-        this.errorMessage = err.error?.message || 'Erreur de connexion';
+        this.errorMessage = err.error?.error || 'Erreur de connexion';
         this.isLoading = false;
       }
     });

@@ -3,6 +3,7 @@ package ASSRONE.backend.service;
 import ASSRONE.backend.dto.ChangePasswordRequest;
 import ASSRONE.backend.dto.UpdateProfileRequest;
 import ASSRONE.backend.dto.UserProfileDto;
+import ASSRONE.backend.exception.InvalidPasswordException;
 import ASSRONE.backend.mapper.UserProfileMapper;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.UserInfoRepository;
@@ -52,7 +53,7 @@ public class UserProfileService {
         User user = findByEmailOrThrow(email);
 
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new IllegalArgumentException("Le mot de passe actuel est incorrect");
+            throw new InvalidPasswordException("Le mot de passe actuel est incorrect");
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
