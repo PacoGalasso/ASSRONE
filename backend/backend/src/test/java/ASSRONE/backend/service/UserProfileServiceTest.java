@@ -1,6 +1,7 @@
 package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.ChangePasswordRequest;
+import ASSRONE.backend.exception.InvalidAvatarException;
 import ASSRONE.backend.exception.InvalidPasswordException;
 import ASSRONE.backend.mapper.UserProfileMapper;
 import ASSRONE.backend.model.User;
@@ -8,12 +9,20 @@ import ASSRONE.backend.repository.UserInfoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,11 +43,15 @@ class UserProfileServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @TempDir
+    private Path uploadDir;
+
     private UserProfileService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserProfileService(userRepository, userProfileMapper, passwordEncoder);
+        service = new UserProfileService(userRepository, userProfileMapper, passwordEncoder, new AvatarImageInspector());
+        ReflectionTestUtils.setField(service, "uploadDir", uploadDir.toString());
     }
 
     private User existingUser() {
@@ -47,6 +60,21 @@ class UserProfileServiceTest {
         user.setPassword("mot-de-passe-actuel-hache");
         return user;
     }
+
+    private static byte[] fixture(String name) throws IOException {
+        try (InputStream stream = UserProfileServiceTest.class.getResourceAsStream("/avatars/" + name)) {
+            if (stream == null) {
+                throw new IllegalStateException("Fixture manquante : " + name);
+            }
+            return stream.readAllBytes();
+        }
+    }
+
+    private Path avatarsDir() {
+        return uploadDir.resolve("avatars");
+    }
+
+    // ===== Mot de passe (non-régression LOT 3b) =====
 
     @Test
     void motDePasseActuelIncorrectLeveInvalidPasswordException() {
@@ -86,5 +114,202 @@ class UserProfileServiceTest {
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
         assertThat(captor.getValue().getPassword()).isEqualTo("nouveau-mot-de-passe-hache");
+    }
+
+    // ===== Upload d'avatar =====
+
+    @Test
+    void uploadAvatarAvecUnContenuInvalideNEcritAucunFichier() throws IOException {
+        // L'inspection précède la récupération de l'utilisateur : aucun stub sur
+        // userRepository.findByEmail n'est nécessaire, la méthode n'est jamais atteinte.
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.jpg", "image/jpeg", fixture("not-an-image.jpg"));
+
+        assertThatThrownBy(() -> service.uploadAvatar("membre@assrone.ch", file))
+                .isInstanceOf(InvalidAvatarException.class);
+
+        assertThat(Files.exists(avatarsDir())).isFalse();
+        verify(userRepository, Mockito.never()).save(any());
+    }
+
+    @Test
+    void uploadAvatarIgnoreLeNomOriginalPourLeNomPhysique() throws IOException {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "../../../etc/passwd.jpg", "image/jpeg", fixture("small-valid.jpg"));
+
+        service.uploadAvatar("membre@assrone.ch", file);
+
+        assertThat(user.getAvatarFilename())
+                .doesNotContain("etc")
+                .doesNotContain("passwd")
+                .doesNotContain("..")
+                .endsWith(".jpg");
+    }
+
+    @Test
+    void uploadAvatarIgnoreLeTypeMimeMultipartFalsifie() throws IOException {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "avatar.jpg", "application/pdf", fixture("small-valid.jpg"));
+
+        service.uploadAvatar("membre@assrone.ch", file);
+
+        assertThat(user.getAvatarFilename()).endsWith(".jpg");
+    }
+
+    @Test
+    void uploadAvatarStockeLExtensionIssueDuFormatDetecte() throws IOException {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", fixture("small-valid.png"));
+
+        service.uploadAvatar("membre@assrone.ch", file);
+
+        assertThat(user.getAvatarFilename()).endsWith(".png");
+    }
+
+    @Test
+    void uploadAvatarGenereUnNomPhysiqueAuFormatUuid() throws IOException {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", fixture("small-valid.jpg"));
+
+        service.uploadAvatar("membre@assrone.ch", file);
+
+        assertThat(user.getAvatarFilename())
+                .matches("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.jpg$");
+    }
+
+    @Test
+    void uploadAvatarEcritLeFichierSousLaRacineAutorisee() throws IOException {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", fixture("small-valid.jpg"));
+
+        service.uploadAvatar("membre@assrone.ch", file);
+
+        Path stored = avatarsDir().resolve(user.getAvatarFilename());
+        assertThat(stored).exists();
+        assertThat(stored.normalize()).startsWith(avatarsDir().normalize());
+    }
+
+    @Test
+    void uploadAvatarCreeLeRepertoireAvatarsSiAbsent() throws IOException {
+        assertThat(Files.exists(avatarsDir())).isFalse();
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", fixture("small-valid.jpg"));
+
+        service.uploadAvatar("membre@assrone.ch", file);
+
+        assertThat(Files.isDirectory(avatarsDir())).isTrue();
+    }
+
+    @Test
+    void uploadAvatarAvecValidationEnEchecLaisseLAncienAvatarIntact() throws IOException {
+        // L'inspection précède la récupération de l'utilisateur : aucun stub sur
+        // userRepository.findByEmail n'est nécessaire, la méthode n'est jamais atteinte.
+        Files.createDirectories(avatarsDir());
+        Path ancien = avatarsDir().resolve("ancien.jpg");
+        Files.write(ancien, fixture("small-valid.jpg"));
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.jpg", "image/jpeg", fixture("not-an-image.jpg"));
+
+        assertThatThrownBy(() -> service.uploadAvatar("membre@assrone.ch", file))
+                .isInstanceOf(InvalidAvatarException.class);
+
+        assertThat(ancien).exists();
+    }
+
+    @Test
+    void uploadAvatarAvecEchecDEcritureNAppelleJamaisLaSauvegardeDb() throws IOException {
+        // Un fichier régulier existe déjà là où le répertoire "avatars" devrait être créé :
+        // Files.createDirectories échoue alors réellement, sans mock ni dépendance aux permissions OS.
+        Files.write(avatarsDir(), fixture("small-valid.jpg"));
+
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", fixture("small-valid.jpg"));
+
+        assertThatThrownBy(() -> service.uploadAvatar("membre@assrone.ch", file))
+                .isInstanceOf(IOException.class);
+
+        verify(userRepository, Mockito.never()).save(any());
+    }
+
+    @Test
+    void uploadAvatarReussiSupprimeLAncienFichierApresSauvegardeReussie() throws IOException {
+        Files.createDirectories(avatarsDir());
+        Path ancien = avatarsDir().resolve("ancien.jpg");
+        Files.write(ancien, fixture("small-valid.jpg"));
+
+        User user = existingUser();
+        user.setAvatarFilename("ancien.jpg");
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", fixture("small-valid.png"));
+
+        service.uploadAvatar("membre@assrone.ch", file);
+
+        assertThat(ancien).doesNotExist();
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void uploadAvatarAvecEchecDeSauvegardeSupprimeLeNouveauFichierEtConserveLAncien() throws IOException {
+        Files.createDirectories(avatarsDir());
+        Path ancien = avatarsDir().resolve("ancien.jpg");
+        Files.write(ancien, fixture("small-valid.jpg"));
+
+        User user = existingUser();
+        user.setAvatarFilename("ancien.jpg");
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        DataAccessResourceFailureException dbFailure = new DataAccessResourceFailureException("base indisponible");
+        when(userRepository.save(user)).thenThrow(dbFailure);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", fixture("small-valid.jpg"));
+
+        assertThatThrownBy(() -> service.uploadAvatar("membre@assrone.ch", file))
+                .isSameAs(dbFailure);
+
+        assertThat(ancien).exists();
+        assertThat(user.getAvatarFilename()).isEqualTo("ancien.jpg");
+        try (var files = Files.list(avatarsDir())) {
+            assertThat(files).containsExactly(ancien);
+        }
+    }
+
+    @Test
+    void uploadAvatarAvecEchecDeSauvegardeParUneExceptionRuntimeNonDataAccessSupprimeLeNouveauFichierEtConserveLAncien() throws IOException {
+        Files.createDirectories(avatarsDir());
+        Path ancien = avatarsDir().resolve("ancien.jpg");
+        Files.write(ancien, fixture("small-valid.jpg"));
+
+        User user = existingUser();
+        user.setAvatarFilename("ancien.jpg");
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        RuntimeException dbFailure = new RuntimeException("erreur inattendue non liée à Spring Data");
+        when(userRepository.save(user)).thenThrow(dbFailure);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", fixture("small-valid.jpg"));
+
+        assertThatThrownBy(() -> service.uploadAvatar("membre@assrone.ch", file))
+                .isSameAs(dbFailure);
+
+        assertThat(ancien).exists();
+        assertThat(user.getAvatarFilename()).isEqualTo("ancien.jpg");
+        try (var files = Files.list(avatarsDir())) {
+            assertThat(files).containsExactly(ancien);
+        }
+    }
+
+    @Test
+    void uploadAvatarNeModifiePasLesAutresProprietesUtilisateur() throws IOException {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", fixture("small-valid.jpg"));
+
+        service.uploadAvatar("membre@assrone.ch", file);
+
+        assertThat(user.getEmail()).isEqualTo("membre@assrone.ch");
+        assertThat(user.getPassword()).isEqualTo("mot-de-passe-actuel-hache");
     }
 }
