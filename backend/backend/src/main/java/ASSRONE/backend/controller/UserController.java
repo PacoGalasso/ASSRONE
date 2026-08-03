@@ -1,10 +1,11 @@
 package ASSRONE.backend.controller;
 
+import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.model.AuthRequest;
 import ASSRONE.backend.model.AuthResponse;
-import ASSRONE.backend.model.User;
 import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.UserInfoService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -27,8 +28,8 @@ public class UserController {
     }
 
     @PostMapping("/addNewUser")
-    public String addNewUser(@RequestBody User userInfo) {
-        return service.addUser(userInfo);
+    public String addNewUser(@Valid @RequestBody RegisterRequest request) {
+        return service.addUser(request);
     }
 
     @PostMapping("/generateToken")

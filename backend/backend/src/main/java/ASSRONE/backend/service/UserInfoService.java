@@ -1,7 +1,10 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.dto.UserDto;
+import ASSRONE.backend.exception.UserAlreadyExistsException;
 import ASSRONE.backend.mapper.UserMapper;
+import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.UserInfoRepository;
 import org.jspecify.annotations.NullMarked;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -44,11 +48,24 @@ public class UserInfoService implements UserDetailsService {
         return new UserInfoDetails(user);
     }
 
-    // Add any additional methods for registering or managing users
-    public String addUser(ASSRONE.backend.model.User userInfo) {
-        // Encrypt password before saving
-        userInfo.setPassword(encoder.encode(userInfo.getPassword()));
-        repository.save(userInfo);
+    public String addUser(RegisterRequest request) {
+        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        if (repository.findByEmail(normalizedEmail).isPresent()) {
+            throw new UserAlreadyExistsException("Un compte existe déjà avec l'email " + normalizedEmail);
+        }
+
+        User user = User.builder()
+                .username(request.getUsername())
+                .email(normalizedEmail)
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .password(encoder.encode(request.getPassword()))
+                .role("USER")
+                .isActive(true)
+                .build();
+
+        repository.save(user);
         return "User added successfully!";
     }
 
