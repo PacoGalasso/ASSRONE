@@ -1,15 +1,21 @@
 package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.DocumentDto;
+import ASSRONE.backend.exception.InvalidDocumentException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.mapper.DocumentMapper;
 import ASSRONE.backend.model.Document;
 import ASSRONE.backend.repository.DocumentRepository;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
+import org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -18,7 +24,10 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,7 +57,7 @@ class DocumentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DocumentService(documentRepository, documentMapper);
+        service = new DocumentService(documentRepository, documentMapper, new PdfDocumentInspector());
         ReflectionTestUtils.setField(service, "uploadDir", uploadDir.toString());
     }
 
@@ -69,12 +79,161 @@ class DocumentServiceTest {
         when(documentMapper.toDto(any())).thenReturn(new DocumentDto());
     }
 
-    // ===== Upload =====
+    private static byte[] validPdfBytes() throws IOException {
+        try (PDDocument document = new PDDocument();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            document.addPage(new PDPage());
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    private static byte[] encryptedPdfBytes() throws IOException {
+        try (PDDocument document = new PDDocument();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            document.addPage(new PDPage());
+            StandardProtectionPolicy policy =
+                    new StandardProtectionPolicy("proprietaire", "utilisateur", new AccessPermission());
+            document.protect(policy);
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    private DocumentService serviceWithInspector(PdfDocumentInspector inspector) {
+        DocumentService instance = new DocumentService(documentRepository, documentMapper, inspector);
+        ReflectionTestUtils.setField(instance, "uploadDir", uploadDir.toString());
+        return instance;
+    }
+
+    // ===== Rejets =====
+
+    @Test
+    void uploadAvecUnMultipartNulEstRejete() {
+        assertThatThrownBy(() -> service.upload(null, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(InvalidDocumentException.class)
+                .hasMessage("Le document est vide.");
+    }
+
+    @Test
+    void uploadAvecUnMultipartVideEstRejete() {
+        MockMultipartFile file = new MockMultipartFile("file", "vide.pdf", "application/pdf", new byte[0]);
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(InvalidDocumentException.class)
+                .hasMessage("Le document est vide.");
+    }
+
+    @Test
+    void uploadAvecUnContenuNonPdfEstRejete() {
+        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "ceci n'est pas un PDF".getBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(InvalidDocumentException.class);
+    }
+
+    @Test
+    void uploadAvecUnPdfCorrompuEstRejete() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "corrompu.pdf", "application/pdf", "%PDF-1.7\nstructure invalide".getBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(InvalidDocumentException.class);
+    }
+
+    @Test
+    void uploadAvecUnPdfChiffreEstRejete() throws IOException {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "chiffre.pdf", "application/pdf", encryptedPdfBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(InvalidDocumentException.class)
+                .hasMessage("Les documents PDF protégés par mot de passe ne sont pas acceptés.");
+    }
+
+    @Test
+    void uploadAvecValidationEnEchecNAppelleJamaisLaSauvegardeDb() {
+        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "pas un pdf".getBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(InvalidDocumentException.class);
+
+        verify(documentRepository, Mockito.never()).save(any());
+    }
+
+    @Test
+    void uploadAvecValidationEnEchecNeLaisseAucunFichierFinal() throws IOException {
+        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "pas un pdf".getBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(InvalidDocumentException.class);
+
+        try (var files = Files.list(uploadDir)) {
+            assertThat(files).isEmpty();
+        }
+    }
+
+    @Test
+    void uploadAvecValidationEnEchecNeLaisseAucunFichierTemporaireResiduel() throws IOException {
+        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "pas un pdf".getBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(InvalidDocumentException.class);
+
+        try (var files = Files.list(uploadDir)) {
+            assertThat(files.anyMatch(p -> p.getFileName().toString().startsWith("upload-"))).isFalse();
+        }
+    }
+
+    // ===== Succès =====
+
+    @Test
+    void uploadAppelleLInspecteurAvantLaSauvegardeDb() throws IOException {
+        PdfDocumentInspector mockInspector = mock(PdfDocumentInspector.class);
+        DocumentService instance = serviceWithInspector(mockInspector);
+        stubSuccessfulSave();
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        instance.upload(file, "Titre", "Description", "admin@assrone.ch");
+
+        InOrder inOrder = Mockito.inOrder(mockInspector, documentRepository);
+        inOrder.verify(mockInspector).inspect(any());
+        inOrder.verify(documentRepository).save(any());
+    }
+
+    @Test
+    void uploadAppelleLInspecteurAvecLeFichierTemporaire() throws IOException {
+        PdfDocumentInspector mockInspector = mock(PdfDocumentInspector.class);
+        DocumentService instance = serviceWithInspector(mockInspector);
+        stubSuccessfulSave();
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        instance.upload(file, "Titre", "Description", "admin@assrone.ch");
+
+        ArgumentCaptor<Path> pathCaptor = ArgumentCaptor.forClass(Path.class);
+        verify(mockInspector).inspect(pathCaptor.capture());
+        assertThat(pathCaptor.getValue().getFileName().toString()).startsWith("upload-").endsWith(".tmp");
+    }
+
+    @Test
+    void leMultipartNEstLuQuUneSeuleFois() throws IOException {
+        stubSuccessfulSave();
+        byte[] contenu = validPdfBytes();
+        MultipartFile mockFile = mock(MultipartFile.class);
+        when(mockFile.isEmpty()).thenReturn(false);
+        when(mockFile.getSize()).thenReturn((long) contenu.length);
+        when(mockFile.getOriginalFilename()).thenReturn("rapport.pdf");
+        when(mockFile.getInputStream()).thenReturn(new ByteArrayInputStream(contenu));
+
+        service.upload(mockFile, "Titre", "Description", "admin@assrone.ch");
+
+        verify(mockFile, Mockito.times(1)).getInputStream();
+    }
 
     @Test
     void uploadGenereUnNomPhysiqueUuidSansExtension() throws IOException {
         stubSuccessfulSave();
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
         service.upload(file, "Titre", "Description", "admin@assrone.ch");
 
@@ -85,10 +244,10 @@ class DocumentServiceTest {
     }
 
     @Test
-    void uploadIgnoreLeNomOriginalPourLeNomPhysique() throws IOException {
+    void uploadIgnoreLExtensionClientPourLeNomPhysique() throws IOException {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile(
-                "file", "../../../etc/passwd.pdf", "application/pdf", "contenu".getBytes());
+                "file", "../../../etc/passwd.pdf", "application/pdf", validPdfBytes());
 
         service.upload(file, "Titre", "Description", "admin@assrone.ch");
 
@@ -102,33 +261,46 @@ class DocumentServiceTest {
     }
 
     @Test
-    void uploadIgnoreLeTypeMimeMultipartFalsifiePourLaPersistance() throws IOException {
+    void uploadIgnoreLeMimeClientFalsifiePourLaPersistance() throws IOException {
         stubSuccessfulSave();
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "text/html", "contenu".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "text/html", validPdfBytes());
 
         service.upload(file, "Titre", "Description", "admin@assrone.ch");
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
-        assertThat(captor.getValue().getContentType()).isEqualTo(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        assertThat(captor.getValue().getContentType()).isEqualTo(MediaType.APPLICATION_PDF_VALUE);
     }
 
     @Test
-    void uploadPersisteExactementApplicationOctetStream() throws IOException {
+    void uploadPersisteExactementApplicationPdf() throws IOException {
         stubSuccessfulSave();
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
         service.upload(file, "Titre", "Description", "admin@assrone.ch");
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
-        assertThat(captor.getValue().getContentType()).isEqualTo("application/octet-stream");
+        assertThat(captor.getValue().getContentType()).isEqualTo("application/pdf");
     }
 
     @Test
-    void uploadEcritLeFichierSousLaRacineAutorisee() throws IOException {
+    void uploadConserveLeNomOriginalUniquementCommeMetadonnee() throws IOException {
         stubSuccessfulSave();
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "rapport-annuel.pdf", "application/pdf", validPdfBytes());
+
+        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+
+        ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(captor.capture());
+        assertThat(captor.getValue().getOriginalFilename()).isEqualTo("rapport-annuel.pdf");
+        assertThat(captor.getValue().getStoredFilename()).isNotEqualTo("rapport-annuel.pdf");
+    }
+
+    @Test
+    void uploadEcritLeFichierFinalSousLaRacineAutorisee() throws IOException {
+        stubSuccessfulSave();
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
         service.upload(file, "Titre", "Description", "admin@assrone.ch");
 
@@ -140,93 +312,9 @@ class DocumentServiceTest {
     }
 
     @Test
-    void uploadCreeLeRepertoireSiAbsent() throws IOException {
-        assertThat(Files.exists(uploadDir.resolve("sentinelle"))).isFalse();
+    void uploadFichierFinalIdentiqueAuxOctetsPdfRecus() throws IOException {
         stubSuccessfulSave();
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
-
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
-
-        assertThat(Files.isDirectory(uploadDir)).isTrue();
-    }
-
-    @Test
-    void uploadAccepteUnContenuArbitraireNonPdf() throws IOException {
-        stubSuccessfulSave();
-        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "ceci n'est pas un PDF".getBytes());
-
-        assertThatCode(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
-                .doesNotThrowAnyException();
-    }
-
-    @Test
-    void uploadAccepteUnFichierVide() throws IOException {
-        stubSuccessfulSave();
-        MockMultipartFile file = new MockMultipartFile("file", "vide.pdf", "application/pdf", new byte[0]);
-
-        assertThatCode(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
-                .doesNotThrowAnyException();
-        verify(documentRepository).save(any());
-    }
-
-    @Test
-    void uploadReussiPersisteLeDocumentEtEcritLeFichier() throws IOException {
-        stubSuccessfulSave();
-        byte[] contenu = "contenu du rapport".getBytes();
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", contenu);
-
-        service.upload(file, "Rapport annuel", "Description", "admin@assrone.ch");
-
-        ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
-        verify(documentRepository).save(captor.capture());
-        Document saved = captor.getValue();
-        assertThat(saved.getTitle()).isEqualTo("Rapport annuel");
-        assertThat(saved.getOriginalFilename()).isEqualTo("rapport.pdf");
-        assertThat(saved.getFileSize()).isEqualTo(contenu.length);
-        assertThat(uploadDir.resolve(saved.getStoredFilename())).exists();
-    }
-
-    @Test
-    void uploadAvecEchecDeSauvegardeSupprimeLeFichier() throws IOException {
-        RuntimeException dbFailure = new DataAccessResourceFailureException("base indisponible");
-        when(documentRepository.save(any())).thenThrow(dbFailure);
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
-
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
-                .isSameAs(dbFailure);
-
-        try (var files = Files.list(uploadDir)) {
-            assertThat(files).isEmpty();
-        }
-    }
-
-    @Test
-    void uploadRelanceExactementLExceptionDOrigineMemeSiElleNEstPasDataAccess() throws IOException {
-        RuntimeException dbFailure = new RuntimeException("erreur inattendue non liée à Spring Data");
-        when(documentRepository.save(any())).thenThrow(dbFailure);
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
-
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
-                .isSameAs(dbFailure);
-    }
-
-    @Test
-    void uploadAvecErreurDisqueNAppelleJamaisLaSauvegardeDb() throws IOException {
-        Path obstruction = uploadDir.resolve("obstruction");
-        Files.write(obstruction, "un fichier régulier occupe l'emplacement attendu".getBytes());
-        ReflectionTestUtils.setField(service, "uploadDir", obstruction.toString());
-        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
-
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
-                .isInstanceOf(IOException.class);
-
-        verify(documentRepository, Mockito.never()).save(any());
-    }
-
-    @Test
-    void uploadEcritUnContenuIdentiqueAuFluxRecu() throws IOException {
-        stubSuccessfulSave();
-        byte[] contenu = "contenu exact du document".getBytes();
+        byte[] contenu = validPdfBytes();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", contenu);
 
         service.upload(file, "Titre", "Description", "admin@assrone.ch");
@@ -237,7 +325,119 @@ class DocumentServiceTest {
         assertThat(Files.readAllBytes(stored)).isEqualTo(contenu);
     }
 
-    // ===== Chargement =====
+    @Test
+    void uploadReussiNeLaisseAucunFichierTemporaireResiduel() throws IOException {
+        stubSuccessfulSave();
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+
+        try (var files = Files.list(uploadDir)) {
+            assertThat(files.anyMatch(p -> p.getFileName().toString().startsWith("upload-"))).isFalse();
+        }
+    }
+
+    @Test
+    void uploadReussiPersisteLeDocumentEtEcritLeFichierFinal() throws IOException {
+        stubSuccessfulSave();
+        byte[] contenu = validPdfBytes();
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", contenu);
+
+        service.upload(file, "Rapport annuel", "Description", "admin@assrone.ch");
+
+        ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(captor.capture());
+        Document saved = captor.getValue();
+        assertThat(saved.getTitle()).isEqualTo("Rapport annuel");
+        assertThat(saved.getFileSize()).isEqualTo(contenu.length);
+        assertThat(uploadDir.resolve(saved.getStoredFilename())).exists();
+    }
+
+    @Test
+    void uploadCreeLeRepertoireSiAbsent() throws IOException {
+        assertThat(Files.exists(uploadDir.resolve("sentinelle"))).isFalse();
+        stubSuccessfulSave();
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+
+        assertThat(Files.isDirectory(uploadDir)).isTrue();
+    }
+
+    // ===== Erreurs techniques =====
+
+    @Test
+    void uploadAvecEchecDeCreationDuTemporaireNAppelleJamaisLaSauvegardeDb() throws IOException {
+        Path obstruction = uploadDir.resolve("obstruction");
+        Files.write(obstruction, "un fichier régulier occupe l'emplacement attendu".getBytes());
+        ReflectionTestUtils.setField(service, "uploadDir", obstruction.toString());
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(IOException.class)
+                .isNotInstanceOf(InvalidDocumentException.class);
+
+        verify(documentRepository, Mockito.never()).save(any());
+    }
+
+    @Test
+    void uploadAvecEchecDeCopieNettoieLeTemporaire() throws IOException {
+        MultipartFile mockFile = mock(MultipartFile.class);
+        when(mockFile.isEmpty()).thenReturn(false);
+        when(mockFile.getInputStream()).thenThrow(new IOException("échec de lecture simulé"));
+
+        assertThatThrownBy(() -> service.upload(mockFile, "Titre", "Description", "admin@assrone.ch"))
+                .isInstanceOf(IOException.class)
+                .isNotInstanceOf(InvalidDocumentException.class);
+
+        verify(documentRepository, Mockito.never()).save(any());
+        try (var files = Files.list(uploadDir)) {
+            assertThat(files).isEmpty();
+        }
+    }
+
+    @Test
+    void uploadAvecErreurRuntimeInattendueDeLInspecteurNettoieLeTemporaireEtRelanceLException() throws IOException {
+        PdfDocumentInspector mockInspector = mock(PdfDocumentInspector.class);
+        RuntimeException unexpected = new IllegalStateException("erreur interne inattendue de PDFBox");
+        Mockito.doThrow(unexpected).when(mockInspector).inspect(any());
+        DocumentService instance = serviceWithInspector(mockInspector);
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        assertThatThrownBy(() -> instance.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isSameAs(unexpected);
+
+        verify(documentRepository, Mockito.never()).save(any());
+        try (var files = Files.list(uploadDir)) {
+            assertThat(files).isEmpty();
+        }
+    }
+
+    @Test
+    void uploadAvecEchecDeSauvegardeSupprimeLeFichierFinal() throws IOException {
+        RuntimeException dbFailure = new DataAccessResourceFailureException("base indisponible");
+        when(documentRepository.save(any())).thenThrow(dbFailure);
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isSameAs(dbFailure);
+
+        try (var files = Files.list(uploadDir)) {
+            assertThat(files).isEmpty();
+        }
+    }
+
+    @Test
+    void uploadRelanceExactementLExceptionDbDOrigineMemeSiElleNEstPasDataAccess() throws IOException {
+        RuntimeException dbFailure = new RuntimeException("erreur inattendue non liée à Spring Data");
+        when(documentRepository.save(any())).thenThrow(dbFailure);
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+                .isSameAs(dbFailure);
+    }
+
+    // ===== Chargement (non-régression LOT 4b1) =====
 
     @Test
     void loadAsResourceAvecAncienNomPhysiqueAvecExtension() throws IOException {
@@ -285,7 +485,7 @@ class DocumentServiceTest {
                 .hasMessage("Document introuvable : 42");
     }
 
-    // ===== Suppression =====
+    // ===== Suppression (non-régression LOT 4b1) =====
 
     @Test
     void deleteAvecUnIdInexistantLeveResourceNotFound() {

@@ -1,6 +1,7 @@
 package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.DocumentDto;
+import ASSRONE.backend.exception.InvalidDocumentException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.mapper.DocumentMapper;
 import ASSRONE.backend.model.Document;
@@ -16,9 +17,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,26 +32,41 @@ public class DocumentService {
 
     private final DocumentRepository documentRepository;
     private final DocumentMapper documentMapper;
+    private final PdfDocumentInspector pdfDocumentInspector;
 
     @Value("${app.upload-dir}")
     private String uploadDir;
 
     public DocumentDto upload(MultipartFile file, String title, String description, String uploadedBy) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new InvalidDocumentException("Le document est vide.");
+        }
+
         Path root = resolveStorageRoot();
         if (!Files.exists(root)) {
             Files.createDirectories(root);
         }
 
-        String storedFilename = UUID.randomUUID().toString();
-        Path target = resolveStoragePath(storedFilename);
-        Files.copy(file.getInputStream(), target);
+        Path temporaryFile = Files.createTempFile(root, "upload-", ".tmp");
+        Path target;
+        try {
+            Files.copy(file.getInputStream(), temporaryFile, StandardCopyOption.REPLACE_EXISTING);
+            pdfDocumentInspector.inspect(temporaryFile);
+
+            String storedFilename = UUID.randomUUID().toString();
+            target = resolveStoragePath(storedFilename);
+            moveIntoPlace(temporaryFile, target);
+            temporaryFile = null;
+        } finally {
+            deleteQuietly(temporaryFile);
+        }
 
         Document document = Document.builder()
                 .title(title)
                 .description(description)
                 .originalFilename(file.getOriginalFilename())
-                .storedFilename(storedFilename)
-                .contentType(MediaType.APPLICATION_OCTET_STREAM_VALUE)
+                .storedFilename(target.getFileName().toString())
+                .contentType(MediaType.APPLICATION_PDF_VALUE)
                 .fileSize(file.getSize())
                 .uploadedBy(uploadedBy)
                 .build();
@@ -62,6 +80,18 @@ public class DocumentService {
         }
 
         return documentMapper.toDto(saved);
+    }
+
+    private void moveIntoPlace(Path temporaryFile, Path target) throws IOException {
+        try {
+            Files.move(temporaryFile, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ex) {
+            Path root = resolveStorageRoot();
+            if (!temporaryFile.startsWith(root) || !target.startsWith(root)) {
+                throw ex;
+            }
+            Files.move(temporaryFile, target);
+        }
     }
 
     public List<DocumentDto> getAll() {
