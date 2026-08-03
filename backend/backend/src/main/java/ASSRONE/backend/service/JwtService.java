@@ -3,9 +3,11 @@ package ASSRONE.backend.service;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.DecodingException;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
@@ -18,17 +20,39 @@ import java.util.function.Function;
 @Component
 public class JwtService {
 
-    private static final String SECRET =
-            "5367566859703373367639792F423F452848284D6251655468576D5A71347437";
+    private static final int SIGNING_KEY_LENGTH_BYTES = 48; // HS384
 
     private static final long ACCESS_TOKEN_DURATION = 1000L * 60 * 30;        // 30 min
     private static final long REFRESH_TOKEN_DURATION = 1000L * 60 * 60 * 24 * 7; // 7 jours
 
     private final UserDetailsService userDetailsService;
+    private final SecretKey signingKey;
 
     @Autowired
-    public JwtService(UserDetailsService userDetailsService) {
+    public JwtService(UserDetailsService userDetailsService, @Value("${app.jwt.secret}") String secret) {
         this.userDetailsService = userDetailsService;
+        this.signingKey = buildSigningKey(secret);
+    }
+
+    private static SecretKey buildSigningKey(String secret) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("app.jwt.secret est absent : impossible de démarrer l'application.");
+        }
+
+        byte[] keyBytes;
+        try {
+            keyBytes = Decoders.BASE64.decode(secret);
+        } catch (DecodingException | IllegalArgumentException ex) {
+            throw new IllegalStateException("app.jwt.secret n'est pas une valeur Base64 valide.");
+        }
+
+        if (keyBytes.length != SIGNING_KEY_LENGTH_BYTES) {
+            throw new IllegalStateException(
+                    "app.jwt.secret doit décoder vers exactement " + SIGNING_KEY_LENGTH_BYTES
+                            + " octets (HS384) ; longueur obtenue : " + keyBytes.length + " octets.");
+        }
+
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     // ===== ACCESS TOKEN =====
@@ -59,7 +83,7 @@ public class JwtService {
                 .subject(email)
                 .issuedAt(issuedAt)
                 .expiration(expiration)
-                .signWith(getSigningKey())
+                .signWith(signingKey)
                 .compact();
     }
 
@@ -79,15 +103,10 @@ public class JwtService {
 
     private Claims extractAllClaims(String token) {
         return Jwts.parser()
-                .verifyWith(getSigningKey())
+                .verifyWith(signingKey)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-    }
-
-    private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(SECRET);
-        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     private boolean isTokenExpired(String token) {

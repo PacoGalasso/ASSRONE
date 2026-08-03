@@ -5,6 +5,7 @@ import ASSRONE.backend.dto.CreateEventRequest;
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.EventRegistrationRequest;
 import ASSRONE.backend.exception.EventFullException;
+import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.mapper.EventMapper;
 import ASSRONE.backend.model.Event;
 import ASSRONE.backend.repository.EventRepository;
@@ -44,7 +45,7 @@ public class EventService {
 
     public EventDto register(Long id, EventRegistrationRequest request) {
         Event event = eventRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Événement introuvable : " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Événement introuvable : " + id));
 
         if (event.getCurrentParticipants() >= event.getMaxParticipants()) {
             throw new EventFullException("Cet événement est complet.");
@@ -60,7 +61,7 @@ public class EventService {
 
     public void deleteEvent(Long id) {
         if (!eventRepository.existsById(id)) {
-            throw new IllegalArgumentException("Événement introuvable : " + id);
+            throw new ResourceNotFoundException("Événement introuvable : " + id);
         }
         eventRepository.deleteById(id);
     }
