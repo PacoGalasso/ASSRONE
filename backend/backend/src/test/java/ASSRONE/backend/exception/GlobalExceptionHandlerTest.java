@@ -47,4 +47,14 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).containsExactly(Map.entry("error", "Le document doit être un fichier PDF valide."));
     }
+
+    @Test
+    void eventRegistrationAlreadyExistsRetourne409AvecUniquementLaCleError() {
+        ResponseEntity<Map<String, String>> response =
+                handler.handleEventRegistrationAlreadyExists(
+                        new EventRegistrationAlreadyExistsException("Vous êtes déjà inscrit à cet événement."));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).containsExactly(Map.entry("error", "Vous êtes déjà inscrit à cet événement."));
+    }
 }
