@@ -41,8 +41,12 @@ export class Apply {
         this.submitted.set(true);
         this.submitting.set(false);
       },
-      error: () => {
-        this.errorMessage.set('Une erreur est survenue. Vérifiez les champs et réessayez.');
+      error: (err) => {
+        this.errorMessage.set(
+          err.status === 409 && err.error?.error
+            ? err.error.error
+            : 'Une erreur est survenue. Vérifiez les champs et réessayez.'
+        );
         this.submitting.set(false);
       },
     });

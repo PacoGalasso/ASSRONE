@@ -2,6 +2,8 @@ package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.CreateMembershipApplicationRequest;
 import ASSRONE.backend.dto.MembershipApplicationDto;
+import ASSRONE.backend.event.MembershipApplicationSubmittedEvent;
+import ASSRONE.backend.exception.MembershipApplicationAlreadyPendingException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.exception.UserAlreadyExistsException;
 import ASSRONE.backend.mapper.MembershipApplicationMapper;
@@ -11,17 +13,22 @@ import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.MembershipApplicationRepository;
 import ASSRONE.backend.repository.UserInfoRepository;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
 public class MembershipApplicationService {
 
+    private static final String PENDING_UNIQUE_CONSTRAINT_NAME = "uk_membership_application_pending_email";
     private static final String PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
     private static final int PASSWORD_LENGTH = 12;
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -31,13 +38,53 @@ public class MembershipApplicationService {
     private final MembershipEmailService membershipEmailService;
     private final UserInfoRepository userInfoRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher eventPublisher;
 
+    @Transactional
     public MembershipApplicationDto submit(CreateMembershipApplicationRequest request) {
+        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        if (userInfoRepository.findByEmail(normalizedEmail).isPresent()) {
+            throw new UserAlreadyExistsException("Un compte existe déjà avec l'email " + normalizedEmail);
+        }
+
+        if (repository.existsByEmailAndStatus(normalizedEmail, ApplicationStatus.PENDING)) {
+            throw new MembershipApplicationAlreadyPendingException(
+                    "Une demande d'adhésion est déjà en cours de traitement pour cet email.");
+        }
+
         MembershipApplication entity = mapper.fromCreateRequest(request);
-        MembershipApplication saved = repository.save(entity);
-        membershipEmailService.sendApplicationNotification(saved);
-        membershipEmailService.sendApplicationConfirmation(saved);
-        return mapper.toDto(saved);
+        entity.setEmail(normalizedEmail);
+
+        try {
+            repository.saveAndFlush(entity);
+        } catch (DataIntegrityViolationException ex) {
+            if (isPendingUniqueConstraintViolation(ex)) {
+                throw new MembershipApplicationAlreadyPendingException(
+                        "Une demande d'adhésion est déjà en cours de traitement pour cet email.");
+            }
+            throw ex;
+        }
+
+        eventPublisher.publishEvent(new MembershipApplicationSubmittedEvent(
+                entity.getId(),
+                entity.getFullName(),
+                entity.getEmail(),
+                entity.getPhone(),
+                entity.getMembershipType(),
+                entity.getMessage()
+        ));
+
+        return mapper.toDto(entity);
+    }
+
+    private static boolean isPendingUniqueConstraintViolation(DataIntegrityViolationException ex) {
+        Throwable cause = ex.getCause();
+        if (cause instanceof ConstraintViolationException constraintViolationException) {
+            String constraintName = constraintViolationException.getConstraintName();
+            return constraintName != null && constraintName.equalsIgnoreCase(PENDING_UNIQUE_CONSTRAINT_NAME);
+        }
+        return false;
     }
 
     public List<MembershipApplicationDto> getAll() {
