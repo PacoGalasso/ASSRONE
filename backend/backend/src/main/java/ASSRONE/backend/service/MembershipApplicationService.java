@@ -2,6 +2,7 @@ package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.CreateMembershipApplicationRequest;
 import ASSRONE.backend.dto.MembershipApplicationDto;
+import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.exception.UserAlreadyExistsException;
 import ASSRONE.backend.mapper.MembershipApplicationMapper;
 import ASSRONE.backend.model.ApplicationStatus;
@@ -49,7 +50,7 @@ public class MembershipApplicationService {
     @Transactional
     public MembershipApplicationDto accept(Long id) {
         MembershipApplication application = repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Demande introuvable : " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Demande introuvable : " + id));
 
         if (userInfoRepository.findByEmail(application.getEmail()).isPresent()) {
             throw new UserAlreadyExistsException("Un compte existe déjà avec l'email " + application.getEmail());
@@ -80,7 +81,7 @@ public class MembershipApplicationService {
 
     public MembershipApplicationDto reject(Long id) {
         MembershipApplication application = repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Demande introuvable : " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Demande introuvable : " + id));
         application.setStatus(ApplicationStatus.REJECTED);
         return mapper.toDto(repository.save(application));
     }

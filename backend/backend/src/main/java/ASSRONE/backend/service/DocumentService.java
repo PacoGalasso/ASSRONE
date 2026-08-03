@@ -1,6 +1,7 @@
 package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.DocumentDto;
+import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.mapper.DocumentMapper;
 import ASSRONE.backend.model.Document;
 import ASSRONE.backend.repository.DocumentRepository;
@@ -68,7 +69,7 @@ public class DocumentService {
 
     public Document getById(Long id) {
         return documentRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Document introuvable : " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Document introuvable : " + id));
     }
 
     public Resource loadAsResource(Document document) throws MalformedURLException {
