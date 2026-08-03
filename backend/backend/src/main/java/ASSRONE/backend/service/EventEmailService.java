@@ -1,7 +1,6 @@
 package ASSRONE.backend.service;
 
-import ASSRONE.backend.dto.EventRegistrationRequest;
-import ASSRONE.backend.model.Event;
+import ASSRONE.backend.event.EventRegistrationConfirmedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
@@ -20,17 +19,17 @@ public class EventEmailService {
     @Value("${spring.mail.username}")
     private String fromAddress;
 
-    public void sendRegistrationConfirmation(Event event, EventRegistrationRequest registration) {
+    public void sendRegistrationConfirmation(EventRegistrationConfirmedEvent event) {
         SimpleMailMessage toParticipant = new SimpleMailMessage();
         toParticipant.setFrom(fromAddress);
-        toParticipant.setTo(registration.getEmail());
-        toParticipant.setSubject("Confirmation d'inscription — " + event.getTitle());
+        toParticipant.setTo(event.participantEmail());
+        toParticipant.setSubject("Confirmation d'inscription — " + event.eventTitle());
         toParticipant.setText(
-                "Bonjour " + registration.getFullName() + ",\n\n"
-                        + "Votre inscription à l'événement \"" + event.getTitle() + "\" est confirmée.\n\n"
-                        + "Date : " + event.getEventDate() + "\n"
-                        + "Horaire : " + event.getStartTime() + " - " + event.getEndTime() + "\n"
-                        + "Lieu : " + event.getLocation() + "\n\n"
+                "Bonjour " + event.participantFullName() + ",\n\n"
+                        + "Votre inscription à l'événement \"" + event.eventTitle() + "\" est confirmée.\n\n"
+                        + "Date : " + event.eventDate() + "\n"
+                        + "Horaire : " + event.startTime() + " - " + event.endTime() + "\n"
+                        + "Lieu : " + event.location() + "\n\n"
                         + "À bientôt,\nL'équipe ASSRONE"
         );
         mailSender.send(toParticipant);
@@ -38,12 +37,12 @@ public class EventEmailService {
         SimpleMailMessage toAssociation = new SimpleMailMessage();
         toAssociation.setFrom(fromAddress);
         toAssociation.setTo(recipient);
-        toAssociation.setReplyTo(registration.getEmail());
-        toAssociation.setSubject("[Inscription événement] " + event.getTitle());
+        toAssociation.setReplyTo(event.participantEmail());
+        toAssociation.setSubject("[Inscription événement] " + event.eventTitle());
         toAssociation.setText(
-                registration.getFullName() + " (" + registration.getEmail() + ") vient de s'inscrire à \""
-                        + event.getTitle() + "\" (" + event.getEventDate() + ").\n\n"
-                        + "Participants : " + event.getCurrentParticipants() + " / " + event.getMaxParticipants()
+                event.participantFullName() + " (" + event.participantEmail() + ") vient de s'inscrire à \""
+                        + event.eventTitle() + "\" (" + event.eventDate() + ").\n\n"
+                        + "Participants : " + event.currentParticipants() + " / " + event.maxParticipants()
         );
         mailSender.send(toAssociation);
     }

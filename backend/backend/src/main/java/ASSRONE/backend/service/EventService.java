@@ -4,6 +4,7 @@ package ASSRONE.backend.service;
 import ASSRONE.backend.dto.CreateEventRequest;
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.EventRegistrationRequest;
+import ASSRONE.backend.event.EventRegistrationConfirmedEvent;
 import ASSRONE.backend.exception.EventFullException;
 import ASSRONE.backend.exception.EventRegistrationAlreadyExistsException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
@@ -13,6 +14,7 @@ import ASSRONE.backend.model.EventRegistration;
 import ASSRONE.backend.repository.EventRegistrationRepository;
 import ASSRONE.backend.repository.EventRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +30,7 @@ public class EventService {
     private final EventRepository eventRepository;
     private final EventRegistrationRepository eventRegistrationRepository;
     private final EventMapper eventMapper;
-    private final EventEmailService eventEmailService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public List<EventDto> getUpcomingEvents() {
         return eventRepository.findByEventDateGreaterThanEqualOrderByEventDateAsc(LocalDate.now())
@@ -52,14 +54,18 @@ public class EventService {
 
     @Transactional
     public EventDto register(Long id, EventRegistrationRequest request) {
-        Event event = eventRepository.findById(id)
+        eventRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Événement introuvable : " + id));
 
-        if (event.getCurrentParticipants() >= event.getMaxParticipants()) {
+        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        int rowsAffected = eventRepository.incrementParticipantsIfCapacityAvailable(id);
+        if (rowsAffected == 0) {
             throw new EventFullException("Cet événement est complet.");
         }
 
-        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Événement introuvable : " + id));
 
         if (eventRegistrationRepository.existsByEventIdAndNormalizedEmail(id, normalizedEmail)) {
             throw new EventRegistrationAlreadyExistsException("Vous êtes déjà inscrit à cet événement.");
@@ -77,12 +83,20 @@ public class EventService {
             throw new EventRegistrationAlreadyExistsException("Vous êtes déjà inscrit à cet événement.");
         }
 
-        event.setCurrentParticipants(event.getCurrentParticipants() + 1);
-        Event saved = eventRepository.save(event);
+        eventPublisher.publishEvent(new EventRegistrationConfirmedEvent(
+                event.getId(),
+                event.getTitle(),
+                event.getEventDate(),
+                event.getStartTime(),
+                event.getEndTime(),
+                event.getLocation(),
+                event.getCurrentParticipants(),
+                event.getMaxParticipants(),
+                request.getEmail(),
+                request.getFullName()
+        ));
 
-        eventEmailService.sendRegistrationConfirmation(saved, request);
-
-        return eventMapper.toDto(saved);
+        return eventMapper.toDto(event);
     }
 
     @Transactional
