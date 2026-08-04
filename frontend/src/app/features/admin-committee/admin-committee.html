@@ -1,0 +1,308 @@
+<!-- features/admin-committee/admin-committee.html -->
+
+<div class="mx-auto max-w-5xl px-6 py-16">
+  <h1 class="mb-2 font-display text-3xl font-semibold text-navy">
+    Gestion du comité
+  </h1>
+
+  <p class="mb-10 text-ink-muted">
+    Ajoutez, modifiez ou masquez les membres affichés sur la page « À propos ».
+  </p>
+
+  @if (listErrorMessage()) {
+    <p class="mb-6 text-sm text-red-600">
+      {{ listErrorMessage() }}
+    </p>
+  }
+
+  <div class="mb-10">
+    @if (!showForm()) {
+      <button
+        (click)="openCreateForm()"
+        type="button"
+        class="rounded-md bg-navy px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-navy-light"
+      >
+        + Ajouter un membre
+      </button>
+    } @else {
+      <div class="rounded-xl border border-line bg-paper p-6">
+        <h3 class="mb-4 font-semibold text-navy">
+          {{ editingId() === null ? 'Nouveau membre' : 'Modifier le membre' }}
+        </h3>
+
+        <form
+          [formGroup]="form"
+          (ngSubmit)="onSubmit()"
+          class="flex flex-col gap-4"
+        >
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-navy">
+                Prénom
+              </label>
+
+              <input
+                type="text"
+                formControlName="firstName"
+                class="w-full rounded-md border border-line bg-white px-3 py-2 focus:border-navy focus:outline-none"
+              />
+
+              @if (form.controls.firstName.invalid && form.controls.firstName.touched) {
+                <p class="mt-1 text-xs text-red-600">
+                  Entre 2 et 80 caractères, obligatoire.
+                </p>
+              }
+            </div>
+
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-navy">
+                Nom
+              </label>
+
+              <input
+                type="text"
+                formControlName="lastName"
+                class="w-full rounded-md border border-line bg-white px-3 py-2 focus:border-navy focus:outline-none"
+              />
+
+              @if (form.controls.lastName.invalid && form.controls.lastName.touched) {
+                <p class="mt-1 text-xs text-red-600">
+                  Entre 2 et 80 caractères, obligatoire.
+                </p>
+              }
+            </div>
+          </div>
+
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-navy">
+              Fonction
+            </label>
+
+            <input
+              type="text"
+              formControlName="role"
+              class="w-full rounded-md border border-line bg-white px-3 py-2 focus:border-navy focus:outline-none"
+            />
+
+            @if (form.controls.role.invalid && form.controls.role.touched) {
+              <p class="mt-1 text-xs text-red-600">
+                Entre 2 et 100 caractères, obligatoire.
+              </p>
+            }
+          </div>
+
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-navy">
+              Description (optionnel)
+            </label>
+
+            <textarea
+              formControlName="description"
+              rows="6"
+              maxlength="1200"
+              class="w-full resize-y rounded-md border border-line bg-white px-3 py-2 focus:border-navy focus:outline-none"
+            ></textarea>
+
+            @if (form.controls.description.invalid && form.controls.description.touched) {
+              <p class="mt-1 text-xs text-red-600">
+                1200 caractères maximum.
+              </p>
+            }
+          </div>
+
+          <div class="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-navy">
+                Ordre d'affichage
+              </label>
+
+              <input
+                type="number"
+                formControlName="displayOrder"
+                min="0"
+                class="w-full rounded-md border border-line bg-white px-3 py-2 focus:border-navy focus:outline-none"
+              />
+
+              @if (form.controls.displayOrder.invalid && form.controls.displayOrder.touched) {
+                <p class="mt-1 text-xs text-red-600">
+                  Nombre entier positif ou nul, obligatoire.
+                </p>
+              }
+            </div>
+
+            <label class="flex items-center gap-2 pb-2.5 text-sm text-navy">
+              <input type="checkbox" formControlName="active"/>
+              Visible sur le site
+            </label>
+          </div>
+
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-navy">
+              Photo (optionnel)
+            </label>
+
+            <input
+              type="file"
+              accept="image/jpeg,image/png"
+              (change)="onFileSelected($event)"
+              class="w-full text-sm text-ink-muted"
+            />
+
+            <p class="mt-2 text-xs text-ink-muted">
+              Les proportions originales de la photo seront conservées.
+            </p>
+          </div>
+
+          @if (editingId() !== null) {
+            @for (member of members(); track member.id) {
+              @if (member.id === editingId() && member.hasPhoto) {
+                <div class="pt-2">
+                  <p class="mb-3 text-sm font-medium text-navy">
+                    Photo actuelle
+                  </p>
+
+                  <div
+                    class="flex min-h-44 max-w-sm items-center justify-center rounded-xl border border-line bg-white p-4"
+                  >
+                    <img
+                      [src]="photoUrl(member)"
+                      [alt]="member.firstName + ' ' + member.lastName"
+                      class="block h-auto max-h-64 w-auto max-w-full rounded-lg object-contain shadow-sm"
+                    />
+                  </div>
+                </div>
+              }
+            }
+          }
+
+          @if (formErrorMessage()) {
+            <p class="text-sm text-red-600">
+              {{ formErrorMessage() }}
+            </p>
+          }
+
+          <div class="flex gap-3">
+            <button
+              type="submit"
+              [disabled]="saving()"
+              class="rounded-md bg-navy px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-navy-light disabled:opacity-50"
+            >
+              {{ saving() ? 'Enregistrement...' : 'Enregistrer' }}
+            </button>
+
+            <button
+              type="button"
+              (click)="cancelForm()"
+              [disabled]="saving()"
+              class="rounded-md px-5 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-navy disabled:opacity-50"
+            >
+              Annuler
+            </button>
+          </div>
+        </form>
+      </div>
+    }
+  </div>
+
+  @if (loading()) {
+    <p class="text-ink-muted">
+      Chargement des membres...
+    </p>
+  } @else if (members().length === 0) {
+    <p class="text-ink-muted">
+      Aucun membre pour le moment.
+    </p>
+  } @else {
+    <div class="flex flex-col divide-y divide-line border-y border-line">
+      @for (member of members(); track member.id) {
+        <div class="flex flex-col justify-between gap-5 py-5 sm:flex-row sm:items-center">
+          <div class="flex min-w-0 items-center gap-5">
+            @if (member.hasPhoto) {
+              <div
+                class="flex h-24 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-white p-1"
+              >
+                <img
+                  [src]="photoUrl(member)"
+                  [alt]="member.firstName + ' ' + member.lastName"
+                  class="block h-auto max-h-full w-auto max-w-full object-contain"
+                />
+              </div>
+            } @else {
+              <div
+                class="flex h-24 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-paper ring-1 ring-line"
+              >
+                <span class="font-display text-base font-semibold text-navy">
+                  {{ member.firstName[0] }}{{ member.lastName[0] }}
+                </span>
+              </div>
+            }
+
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="font-semibold text-navy">
+                  {{ member.firstName }} {{ member.lastName }}
+                </h3>
+
+                <span
+                  class="text-xs font-semibold uppercase tracking-wide"
+                  [class.text-gold]="member.active"
+                  [class.text-ink-muted]="!member.active"
+                >
+                  {{ member.active ? 'Visible' : 'Masqué' }}
+                </span>
+              </div>
+
+              <p class="text-sm text-ink-muted">
+                {{ member.role }} · ordre {{ member.displayOrder }}
+              </p>
+            </div>
+          </div>
+
+          <div class="flex flex-shrink-0 flex-wrap items-center gap-3">
+            @if (member.hasPhoto) {
+              <button
+                (click)="onDeletePhoto(member)"
+                type="button"
+                [disabled]="removingPhotoId() === member.id"
+                class="text-xs font-medium text-ink-muted transition-colors hover:text-red-600 disabled:opacity-50"
+              >
+                {{ removingPhotoId() === member.id ? '...' : 'Retirer la photo' }}
+              </button>
+            }
+
+            <button
+              (click)="openEditForm(member)"
+              type="button"
+              class="text-sm font-semibold text-gold transition-colors hover:text-navy"
+            >
+              Modifier
+            </button>
+
+            <button
+              (click)="onDelete(member)"
+              type="button"
+              [disabled]="deletingId() === member.id"
+              title="Supprimer le membre"
+              class="text-ink-muted transition-colors hover:text-red-600 disabled:opacity-50"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                class="h-5 w-5"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

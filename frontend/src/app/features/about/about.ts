@@ -1,12 +1,44 @@
 // features/about/about.ts
-import {Component} from '@angular/core';
+import {Component, OnInit, inject, signal} from '@angular/core';
+import {CommitteeMemberService} from '../../core/auth/services/committee-member-service';
+import {CommitteeMemberDto} from '../../core/auth/models/committee-member.model';
 
 @Component({
   selector: 'app-about',
   standalone: true,
   templateUrl: './about.html',
 })
-export class About {
+export class About implements OnInit {
+  private committeeMemberService = inject(CommitteeMemberService);
+
+  team = signal<CommitteeMemberDto[]>([]);
+  teamLoading = signal(true);
+  teamError = signal(false);
+
+  ngOnInit(): void {
+    this.committeeMemberService.getPublicMembers().subscribe({
+      next: (members) => {
+        this.team.set(members);
+        this.teamLoading.set(false);
+      },
+      error: () => {
+        this.teamError.set(true);
+        this.teamLoading.set(false);
+      },
+    });
+  }
+
+  photoUrl(member: CommitteeMemberDto): string {
+    return this.committeeMemberService.photoUrl(member.id);
+  }
+
+  isVacantSeat(member: CommitteeMemberDto): boolean {
+    return member.firstName === 'Poste' && member.lastName === 'à pourvoir';
+  }
+
+  initials(member: CommitteeMemberDto): string {
+    return `${member.firstName[0] ?? ''}${member.lastName[0] ?? ''}`.toUpperCase();
+  }
   protected readonly historyParagraphs = [
     "ASSRONE est née d'un constat partagé : le besoin de créer des liens entre les professionnel·le·s de la neuropédagogie, la recherche, le monde éducatif et la pratique de terrain.",
     "Face aux enjeux liés aux troubles du neurodéveloppement et à la neurodiversité, l'association s'est structurée pour favoriser le partage de savoirs, soutenir les pratiques et œuvrer à la reconnaissance de la spécialisation en neuropédagogie en Suisse.",
@@ -30,25 +62,6 @@ export class About {
       title: 'Conscience professionnelle',
       description: "Nos actions s'appuient sur des connaissances scientifiques validées, une réflexion critique et une éthique professionnelle exigeante."
     },
-  ];
-
-  protected readonly team = [
-    {
-      name: 'Béatrice Amoroso Galasso',
-      role: 'Présidente',
-      initials: 'NB',
-      description: "Diplômée en éducation spécialisée et en neuropédagogie, titulaire d’un master en enseignement spécialisé et d’un DAS en éducation précoce spécialisée, j’accompagne les équipes enseignantes qui accueillent des élèves avec un trouble du spectre de l’autisme (TSA) en proposant des pistes d’intervention concrètes et des sensibilisations ciblées adaptées aux besoins des élèves et à la réalité du terrain.\n" +
-        "\n" +
-        "En parallèle, je conçois et co-anime des ateliers d’habiletés sociales pour enfants, ainsi que des formations destinées aux adultes. Forte d’une expérience auprès d’enfants présentant des troubles du neurodéveloppement (TSA, TDAH, troubles des apprentissages, déficience intellectuelle) et des difficultés de développement, j’interviens avec une approche centrée sur l’enfant et son environnement inclusif — famille, garderie, école. \n" +
-        "\n" +
-        "Mes compétences clés : guidance interactive et accompagnement familial, outils de communication alternative et améliorée (CAA), soutien gestuel et approches psychocorporelles."
-    },
-    {name: 'Helena Da Silva', role: 'Vice-présidente', initials: 'HD'},
-    {name: 'Candice Floch', role: 'Co-secrétaire', initials: 'CF'},
-    {name: 'Amélie Gautier Meynier', role: 'Co-secrétaire', initials: 'AG'},
-    {name: 'Sandra Schaller', role: 'Trésorière', initials: 'SS'},
-    {name: 'Isabelle Santarelli', role: 'Membre du Comité', initials: 'IS'},
-    {name: 'Poste à pourvoir', role: 'Membre du Comité', initials: '—'},
   ];
 
   protected readonly commitments = [
