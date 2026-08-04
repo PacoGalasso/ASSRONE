@@ -6,6 +6,8 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -15,11 +17,15 @@ public class UserInfoDetails implements UserDetails {
     private final String password;
     private final List<GrantedAuthority> authorities;
     private final boolean enabled;
+    private final LocalDateTime lockedUntil;
+    private final Clock clock;
 
-    public UserInfoDetails(User user) {
+    public UserInfoDetails(User user, Clock clock) {
         this.username = user.getEmail();
         this.password = user.getPassword();
         this.enabled = Boolean.TRUE.equals(user.getIsActive());
+        this.lockedUntil = user.getLockedUntil();
+        this.clock = clock;
 
         // La colonne stocke "USER"/"ADMIN" (contrainte SQL), Spring Security
         // attend le préfixe "ROLE_" pour que hasRole(...) fonctionne.
@@ -50,7 +56,7 @@ public class UserInfoDetails implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return true;
+        return lockedUntil == null || lockedUntil.isBefore(LocalDateTime.now(clock));
     }
 
     @Override

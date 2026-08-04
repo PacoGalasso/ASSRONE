@@ -49,6 +49,16 @@ public class User {
     @Column(name = "last_login")
     private LocalDateTime lastLogin;
 
+    // columnDefinition ensures Hibernate's own generated ALTER TABLE includes a
+    // default, so it stays safe against an existing, already-populated users
+    // table (a plain "not null" ALTER without a default fails on Postgres).
+    @Column(name = "failed_login_attempts", nullable = false, columnDefinition = "integer not null default 0")
+    @Builder.Default
+    private int failedLoginAttempts = 0;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

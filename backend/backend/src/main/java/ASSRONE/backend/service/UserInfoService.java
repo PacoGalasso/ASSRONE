@@ -14,6 +14,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -24,12 +25,14 @@ public class UserInfoService implements UserDetailsService {
     private final UserInfoRepository repository;
     private final PasswordEncoder encoder;
     private final UserMapper userMapper;
+    private final Clock clock;
 
     @Autowired
-    public UserInfoService(UserInfoRepository repository, PasswordEncoder encoder, UserMapper userMapper) {
+    public UserInfoService(UserInfoRepository repository, PasswordEncoder encoder, UserMapper userMapper, Clock clock) {
         this.repository = repository;
         this.encoder = encoder;
         this.userMapper = userMapper;
+        this.clock = clock;
     }
 
     // Method to load user details by username (email)
@@ -45,7 +48,7 @@ public class UserInfoService implements UserDetailsService {
 
         // Convert UserInfo to UserDetails (UserInfoDetails)
         ASSRONE.backend.model.User user = userInfo.get();
-        return new UserInfoDetails(user);
+        return new UserInfoDetails(user, clock);
     }
 
     public String addUser(RegisterRequest request) {
