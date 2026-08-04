@@ -4,7 +4,7 @@ import {RouterLink} from '@angular/router';
 import {FormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
 import {AuthService} from '../../core/auth/services/auth-service';
 import {DocumentService} from '../../core/auth/services/document-service';
-import {DocumentItem} from '../../core/auth/models/document.model';
+import {DocumentItem, DocumentVisibility} from '../../core/auth/models/document.model';
 
 @Component({
   selector: 'app-members-portal',
@@ -27,6 +27,7 @@ export class MembersPortal implements OnInit {
   uploadForm = this.fb.nonNullable.group({
     title: ['', Validators.required],
     description: [''],
+    visibility: ['' as DocumentVisibility | '', Validators.required],
   });
 
   isAdmin = () => this.authService.isAdmin();
@@ -53,7 +54,7 @@ export class MembersPortal implements OnInit {
 
   onUpload(): void {
     const file = this.selectedFile();
-    if (!file || this.uploadForm.invalid) {
+    if (!file || this.uploadForm.invalid || this.uploading()) {
       this.uploadForm.markAllAsTouched();
       return;
     }
@@ -61,8 +62,8 @@ export class MembersPortal implements OnInit {
     this.uploading.set(true);
     this.errorMessage.set(null);
 
-    const {title, description} = this.uploadForm.getRawValue();
-    this.documentService.upload(file, title, description).subscribe({
+    const {title, description, visibility} = this.uploadForm.getRawValue();
+    this.documentService.upload(file, title, description, visibility as DocumentVisibility).subscribe({
       next: () => {
         this.uploading.set(false);
         this.showUploadForm.set(false);

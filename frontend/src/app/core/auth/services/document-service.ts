@@ -2,7 +2,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import {DocumentItem} from '../models/document.model';
+import {DocumentItem, DocumentVisibility} from '../models/document.model';
 
 @Injectable({ providedIn: 'root' })
 export class DocumentService {
@@ -13,11 +13,12 @@ export class DocumentService {
     return this.http.get<DocumentItem[]>(this.baseUrl);
   }
 
-  upload(file: File, title: string, description: string): Observable<DocumentItem> {
+  upload(file: File, title: string, description: string, visibility: DocumentVisibility): Observable<DocumentItem> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', title);
     formData.append('description', description);
+    formData.append('visibility', visibility);
     return this.http.post<DocumentItem>(this.baseUrl, formData);
   }
 

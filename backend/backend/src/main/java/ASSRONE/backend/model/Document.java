@@ -39,6 +39,10 @@ public class Document {
     @Column(nullable = false)
     private String uploadedBy;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private DocumentVisibility visibility;
+
     @Builder.Default
     private LocalDateTime uploadedAt = LocalDateTime.now();
 }

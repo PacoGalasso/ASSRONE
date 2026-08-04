@@ -38,6 +38,28 @@
               <input type="file" (change)="onFileSelected($event)"
                      class="w-full text-sm text-[#5C5F66]" />
             </div>
+            <div>
+              <label class="block text-sm font-medium text-[#122347] mb-1.5">Visibilité</label>
+              <div class="flex flex-col gap-2">
+                <label class="flex items-start gap-2 text-sm text-[#122347]">
+                  <input type="radio" formControlName="visibility" value="MEMBERS" class="mt-0.5" />
+                  <span>
+                    Tous les membres
+                    <span class="block text-xs text-[#8A8A8A]">Visible par tous les membres connectés.</span>
+                  </span>
+                </label>
+                <label class="flex items-start gap-2 text-sm text-[#122347]">
+                  <input type="radio" formControlName="visibility" value="ADMIN_ONLY" class="mt-0.5" />
+                  <span>
+                    Comité uniquement
+                    <span class="block text-xs text-[#8A8A8A]">Visible uniquement par les membres du comité.</span>
+                  </span>
+                </label>
+              </div>
+              @if (uploadForm.controls.visibility.invalid && uploadForm.controls.visibility.touched) {
+                <p class="text-xs text-red-600 mt-1">Veuillez choisir une visibilité.</p>
+              }
+            </div>
 
             @if (errorMessage()) {
               <p class="text-sm text-red-600">{{ errorMessage() }}</p>
@@ -71,7 +93,12 @@
       @for (doc of documents(); track doc.id) {
         <div class="flex items-center justify-between gap-4 py-5">
           <div>
-            <h3 class="font-semibold text-[#122347]">{{ doc.title }}</h3>
+            <div class="flex items-center gap-2">
+              <h3 class="font-semibold text-[#122347]">{{ doc.title }}</h3>
+              @if (doc.visibility === 'ADMIN_ONLY') {
+                <span class="text-xs font-semibold uppercase tracking-wide text-[#AD7A26]">Comité uniquement</span>
+              }
+            </div>
             @if (doc.description) {
               <p class="text-sm text-[#5C5F66] mt-0.5">{{ doc.description }}</p>
             }
