@@ -72,6 +72,24 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(SelfActionForbiddenException.class)
+    public ResponseEntity<Map<String, String>> handleSelfActionForbidden(SelfActionForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(LastAdministratorException.class)
+    public ResponseEntity<Map<String, String>> handleLastAdministrator(LastAdministratorException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(UserDeletionConflictException.class)
+    public ResponseEntity<Map<String, String>> handleUserDeletionConflict(UserDeletionConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationErrors(MethodArgumentNotValidException ex) {
         Map<String, Object> errors = new HashMap<>();

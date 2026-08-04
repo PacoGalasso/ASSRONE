@@ -2,7 +2,7 @@
 import {inject, Injectable} from '@angular/core';
 import {HttpClient} from '@angular/common/http';
 import {Observable} from 'rxjs';
-import {UserProfile} from '../models/profile.model';
+import {Role, UserProfile} from '../models/profile.model';
 
 @Injectable({providedIn: 'root'})
 export class AdminUserService {
@@ -11,5 +11,13 @@ export class AdminUserService {
 
   getAll(): Observable<UserProfile[]> {
     return this.http.get<UserProfile[]>(this.baseUrl);
+  }
+
+  changeRole(id: number, role: Role): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/${id}/role`, {role});
+  }
+
+  deleteUser(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${id}`);
   }
 }

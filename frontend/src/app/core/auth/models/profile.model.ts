@@ -1,4 +1,6 @@
 // features/profile/profile.model.ts
+export type Role = 'ADMIN' | 'USER';
+
 export interface UserProfile {
   id: number;
   email: string;
@@ -7,6 +9,10 @@ export interface UserProfile {
   lastName: string;
   role: string;
   createdAt: string;
+}
+
+export interface RoleChangeRequest {
+  role: Role;
 }
 
 export interface UpdateProfileRequest {
