@@ -2,57 +2,89 @@
 
 <!-- HERO -->
 <header class="relative overflow-hidden bg-navy">
-  <svg class="absolute inset-0 w-full h-full opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
+  <svg
+    class="absolute inset-0 h-full w-full opacity-[0.06]"
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <defs>
-      <pattern id="grid-about" width="40" height="40" patternUnits="userSpaceOnUse">
+      <pattern
+        id="grid-about"
+        width="40"
+        height="40"
+        patternUnits="userSpaceOnUse"
+      >
         <circle cx="2" cy="2" r="1.5" fill="white"/>
       </pattern>
     </defs>
+
     <rect width="100%" height="100%" fill="url(#grid-about)"/>
   </svg>
 
-  <div class="relative max-w-3xl mx-auto px-6 py-24 text-center">
-    <p class="text-sm font-semibold tracking-widest uppercase text-gold-light mb-5">À propos</p>
-    <h1 class="font-display text-4xl md:text-5xl font-semibold text-white leading-tight mb-6">
+  <div class="relative mx-auto max-w-3xl px-6 py-24 text-center">
+    <p class="mb-5 text-sm font-semibold uppercase tracking-widest text-gold-light">
+      À propos
+    </p>
+
+    <h1 class="mb-6 font-display text-4xl font-semibold leading-tight text-white md:text-5xl">
       Une association engagée pour une pédagogie inclusive
     </h1>
-    <p class="text-lg text-white/75 leading-relaxed">
-      L'<strong class="text-white">Association Suisse Romande de Neuropédagogie</strong> rassemble des
-      professionnel·le·s formé·e·s en neuropédagogie, ainsi que toute personne ou organisation intéressée par ce
-      domaine. Neutre sur les plans politique et confessionnel, elle agit pour une pédagogie inclusive fondée sur des
-      connaissances scientifiques actualisées et le respect des singularités.
+
+    <p class="text-lg leading-relaxed text-white/75">
+      L'<strong class="text-white">Association Suisse Romande de Neuropédagogie</strong>
+      rassemble des professionnel·le·s formé·e·s en neuropédagogie, ainsi que toute
+      personne ou organisation intéressée par ce domaine. Neutre sur les plans
+      politique et confessionnel, elle agit pour une pédagogie inclusive fondée sur
+      des connaissances scientifiques actualisées et le respect des singularités.
     </p>
   </div>
 </header>
 
 <!-- NOTRE HISTOIRE -->
-<section class="max-w-6xl mx-auto px-6 py-20">
-  <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-12">
+<section class="mx-auto max-w-6xl px-6 py-20">
+  <div class="grid grid-cols-1 gap-12 lg:grid-cols-[280px_1fr]">
     <div>
-      <p class="text-sm font-semibold tracking-widest uppercase text-gold mb-3">Depuis 2025</p>
-      <h2 class="font-display text-3xl font-semibold text-navy">Notre histoire</h2>
+      <p class="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">
+        Depuis 2025
+      </p>
+
+      <h2 class="font-display text-3xl font-semibold text-navy">
+        Notre histoire
+      </h2>
     </div>
+
     <div>
       @for (paragraph of historyParagraphs; track paragraph) {
-        <p class="text-ink-muted leading-relaxed mb-5">{{ paragraph }}</p>
+        <p class="mb-5 leading-relaxed text-ink-muted">
+          {{ paragraph }}
+        </p>
       }
     </div>
   </div>
 </section>
 
 <!-- NOS VALEURS -->
-<section class="bg-white border-y border-line">
-  <div class="max-w-5xl mx-auto px-6 py-20">
-    <div class="text-center mb-14">
-      <p class="text-sm font-semibold tracking-widest uppercase text-gold mb-3">Ce qui nous guide</p>
-      <h2 class="font-display text-3xl font-semibold text-navy">Nos valeurs</h2>
+<section class="border-y border-line bg-white">
+  <div class="mx-auto max-w-5xl px-6 py-20">
+    <div class="mb-14 text-center">
+      <p class="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">
+        Ce qui nous guide
+      </p>
+
+      <h2 class="font-display text-3xl font-semibold text-navy">
+        Nos valeurs
+      </h2>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 border-t border-l border-line">
+    <div class="grid grid-cols-1 border-l border-t border-line md:grid-cols-2">
       @for (value of values; track value.title) {
-        <div class="border-r border-b border-line p-8">
-          <h3 class="font-display text-xl font-semibold text-navy mb-3">{{ value.title }}</h3>
-          <p class="text-ink-muted leading-relaxed">{{ value.description }}</p>
+        <div class="border-b border-r border-line p-8">
+          <h3 class="mb-3 font-display text-xl font-semibold text-navy">
+            {{ value.title }}
+          </h3>
+
+          <p class="leading-relaxed text-ink-muted">
+            {{ value.description }}
+          </p>
         </div>
       }
     </div>
@@ -60,48 +92,144 @@
 </section>
 
 <!-- NOTRE ÉQUIPE -->
-<section class="max-w-6xl mx-auto px-6 py-20">
-  <div class="text-center mb-14">
-    <p class="text-sm font-semibold tracking-widest uppercase text-gold mb-3">Le comité</p>
-    <h2 class="font-display text-3xl font-semibold text-navy">Notre équipe</h2>
+<section class="mx-auto max-w-6xl px-6 py-20">
+  <div class="mb-14 text-center">
+    <p class="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">
+      Le comité
+    </p>
+
+    <h2 class="font-display text-3xl font-semibold text-navy">
+      Notre équipe
+    </h2>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-10">
-    <!-- reste du comité -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-      @for (member of team; track member.name) {
-        <div class="border border-line rounded-xl p-6 text-center place-items: center">
-          <div class="w-14 h-14 rounded-full border-2 border-line flex items-center justify-center mx-auto mb-4">
-            <span class="font-display font-semibold text-navy">{{ member.initials }}</span>
+  @if (teamLoading()) {
+    <p class="text-center text-ink-muted">
+      Chargement de l'équipe...
+    </p>
+  } @else if (teamError()) {
+    <p class="text-center text-ink-muted">
+      L'équipe n'a pas pu être chargée pour le moment.
+    </p>
+  } @else if (team().length === 0) {
+    <p class="text-center text-ink-muted">
+      Aucun membre à afficher pour le moment.
+    </p>
+  } @else {
+    <div
+      class="mx-auto grid max-w-6xl grid-cols-1 items-start gap-7 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      @for (member of team(); track member.id) {
+        <article
+          class="w-full self-start overflow-hidden rounded-2xl border border-line bg-white shadow-sm transition-shadow duration-200 hover:shadow-md"
+        >
+          <div class="h-1 w-full bg-gold/70"></div>
+
+          <div class="flex flex-col items-center px-7 py-8 text-center">
+            @if (member.hasPhoto) {
+              <div class="mb-6 flex min-h-44 w-full items-center justify-center">
+                <img
+                  [src]="photoUrl(member)"
+                  [alt]="member.firstName + ' ' + member.lastName"
+                  class="block h-auto max-h-52 w-auto max-w-full rounded-xl object-contain shadow-sm ring-1 ring-line"
+                />
+              </div>
+            } @else if (isVacantSeat(member)) {
+              <div
+                class="mb-6 flex h-44 w-36 items-center justify-center rounded-xl bg-paper shadow-sm ring-1 ring-line"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  class="h-11 w-11 text-ink-muted"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
+                  />
+                </svg>
+              </div>
+            } @else {
+              <div
+                class="mb-6 flex h-44 w-36 items-center justify-center rounded-xl bg-paper shadow-sm ring-1 ring-line"
+              >
+                <span class="font-display text-2xl font-semibold text-navy">
+                  {{ initials(member) }}
+                </span>
+              </div>
+            }
+
+            <h3 class="font-display text-lg font-semibold leading-tight text-navy">
+              {{ member.firstName }} {{ member.lastName }}
+            </h3>
+
+            <p class="mt-1 text-sm font-semibold text-gold">
+              {{ member.role }}
+            </p>
+
+            @if (member.description) {
+              <div class="mt-6 w-full border-t border-line pt-5">
+                <p
+                  class="whitespace-pre-line text-left text-sm leading-relaxed text-ink-muted"
+                >
+                  {{ member.description }}
+                </p>
+              </div>
+            }
           </div>
-          <h3 class="font-semibold text-navy leading-snug">{{ member.name }}</h3>
-          <p class="text-xs text-gold font-medium">{{ member.role }}</p>
-        </div>
+        </article>
       }
     </div>
-  </div>
+  }
 </section>
 
 <!-- NOTRE ENGAGEMENT -->
-<section class="bg-navy relative overflow-hidden">
-  <svg class="absolute inset-0 w-full h-full opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
+<section class="relative overflow-hidden bg-navy">
+  <svg
+    class="absolute inset-0 h-full w-full opacity-[0.06]"
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <rect width="100%" height="100%" fill="url(#grid-about)"/>
   </svg>
 
-  <div class="relative max-w-3xl mx-auto px-6 py-20">
-    <p class="text-sm font-semibold tracking-widest uppercase text-gold-light mb-4 text-center">Notre engagement</p>
-    <h2 class="font-display text-3xl font-semibold text-white text-center mb-2">Agir concrètement pour la
-      neurodiversité</h2>
-    <p class="text-white/60 text-center mb-12">ASSRONE s'engage à :</p>
+  <div class="relative mx-auto max-w-3xl px-6 py-20">
+    <p class="mb-4 text-center text-sm font-semibold uppercase tracking-widest text-gold-light">
+      Notre engagement
+    </p>
 
-    <ul class="flex flex-col gap-5 max-w-xl mx-auto">
+    <h2 class="mb-2 text-center font-display text-3xl font-semibold text-white">
+      Agir concrètement pour la neurodiversité
+    </h2>
+
+    <p class="mb-12 text-center text-white/60">
+      ASSRONE s'engage à :
+    </p>
+
+    <ul class="mx-auto flex max-w-xl flex-col gap-5">
       @for (commitment of commitments; track commitment) {
-        <li class="flex gap-3 items-start border-b border-white/15 pb-5 last:border-0">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               class="h-5 w-5 text-gold-light flex-shrink-0 mt-0.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+        <li class="flex items-start gap-3 border-b border-white/15 pb-5 last:border-0">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            class="mt-0.5 h-5 w-5 flex-shrink-0 text-gold-light"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4.5 12.75l6 6 9-13.5"
+            />
           </svg>
-          <span class="text-white/85 leading-snug">{{ commitment }}</span>
+
+          <span class="leading-snug text-white/85">
+            {{ commitment }}
+          </span>
         </li>
       }
     </ul>

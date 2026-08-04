@@ -92,6 +92,11 @@ export const routes: Routes = [
         canActivate: [adminGuard],
         loadComponent: () => import('./features/admin-membership/admin-membership').then(m => m.AdminMembership)
       },
+      {
+        path: 'admin/committee',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./features/admin-committee/admin-committee').then(m => m.AdminCommittee)
+      },
     ]
   },
 
