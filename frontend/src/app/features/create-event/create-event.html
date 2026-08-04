@@ -27,13 +27,13 @@
     </div>
 
     <div>
-      <label class="block text-sm font-medium text-[#122347] mb-1.5">Type</label>
-      <select formControlName="type"
-              class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]">
-        <option value="FORMATION">Formation</option>
-        <option value="WEBINAIRE">Webinaire</option>
-        <option value="ATELIER">Atelier</option>
-      </select>
+      <label class="block text-sm font-medium text-[#122347] mb-1.5">Type d'événement</label>
+      <input type="text" formControlName="type" maxlength="80"
+             placeholder="Ex. conférence, rencontre, formation…"
+             class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]" />
+      @if (form.controls.type.invalid && form.controls.type.touched) {
+        <p class="text-sm text-red-600 mt-1">Le type d'événement est obligatoire (80 caractères maximum).</p>
+      }
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">

@@ -4,7 +4,9 @@ package ASSRONE.backend.service;
 import ASSRONE.backend.dto.CreateEventRequest;
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.EventRegistrationRequest;
+import ASSRONE.backend.dto.UpdateEventRequest;
 import ASSRONE.backend.event.EventRegistrationConfirmedEvent;
+import ASSRONE.backend.exception.EventCapacityConflictException;
 import ASSRONE.backend.exception.EventFullException;
 import ASSRONE.backend.exception.EventRegistrationAlreadyExistsException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
@@ -46,9 +48,36 @@ public class EventService {
                 .toList();
     }
 
+    public EventDto getEventById(Long id) {
+        return eventRepository.findById(id)
+                .map(eventMapper::toDto)
+                .orElseThrow(() -> new ResourceNotFoundException("Événement introuvable : " + id));
+    }
+
     public EventDto createEvent(CreateEventRequest request) {
         Event event = eventMapper.fromCreateRequest(request);
+        event.setType(event.getType().trim());
         Event saved = eventRepository.save(event);
+        return eventMapper.toDto(saved);
+    }
+
+    @Transactional
+    public EventDto updateEvent(Long id, UpdateEventRequest request) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Événement introuvable : " + id));
+
+        int capacityRowsAffected = eventRepository.updateMaxParticipantsIfSufficientCapacity(id, request.getMaxParticipants());
+        if (capacityRowsAffected == 0) {
+            throw new EventCapacityConflictException(
+                    "La capacité demandée est inférieure au nombre d'inscrits actuels.");
+        }
+
+        Event refreshed = eventRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Événement introuvable : " + id));
+        eventMapper.updateEntityFromRequest(request, refreshed);
+        refreshed.setType(refreshed.getType().trim());
+
+        Event saved = eventRepository.save(refreshed);
         return eventMapper.toDto(saved);
     }
 

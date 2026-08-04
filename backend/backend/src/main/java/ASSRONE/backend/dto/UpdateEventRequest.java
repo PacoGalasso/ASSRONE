@@ -11,7 +11,7 @@ import java.time.LocalTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CreateEventRequest {
+public class UpdateEventRequest {
 
     @NotBlank(message = "Le titre est obligatoire")
     private String title;

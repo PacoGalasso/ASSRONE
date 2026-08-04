@@ -36,6 +36,12 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(EventCapacityConflictException.class)
+    public ResponseEntity<Map<String, String>> handleEventCapacityConflict(EventCapacityConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(EventRegistrationAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleEventRegistrationAlreadyExists(EventRegistrationAlreadyExistsException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)

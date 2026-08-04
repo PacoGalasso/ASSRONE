@@ -17,7 +17,7 @@ export class CreateEvent {
   form = this.fb.nonNullable.group({
     title: ['', Validators.required],
     description: ['', Validators.required],
-    type: ['FORMATION' as const, Validators.required],
+    type: ['', [Validators.required, Validators.maxLength(80)]],
     eventDate: ['', Validators.required],
     startTime: ['', Validators.required],
     endTime: ['', Validators.required],
@@ -28,7 +28,7 @@ export class CreateEvent {
   private router = inject(Router);
 
   onSubmit(): void {
-    if (this.form.invalid) {
+    if (this.form.invalid || this.submitting()) {
       this.form.markAllAsTouched();
       return;
     }
@@ -36,7 +36,8 @@ export class CreateEvent {
     this.submitting.set(true);
     this.errorMessage.set(null);
 
-    this.eventService.create(this.form.getRawValue()).subscribe({
+    const value = this.form.getRawValue();
+    this.eventService.create({...value, type: value.type.trim()}).subscribe({
       next: () => this.router.navigate(['/events']),
       error: () => {
         this.errorMessage.set("Une erreur est survenue. Vérifiez les champs et réessayez.");

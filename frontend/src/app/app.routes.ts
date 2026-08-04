@@ -83,6 +83,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/create-event/create-event').then(m => m.CreateEvent)
       },
       {
+        path: 'events/:id/edit',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./features/edit-event/edit-event').then(m => m.EditEvent)
+      },
+      {
         path: 'admin/membership',
         canActivate: [adminGuard],
         loadComponent: () => import('./features/admin-membership/admin-membership').then(m => m.AdminMembership)

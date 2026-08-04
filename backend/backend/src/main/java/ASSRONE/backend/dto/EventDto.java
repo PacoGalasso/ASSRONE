@@ -1,6 +1,5 @@
 package ASSRONE.backend.dto;
 
-import ASSRONE.backend.model.EventType;
 import lombok.*;
 
 import java.time.LocalDate;
@@ -15,7 +14,7 @@ public class EventDto {
     private Long id;
     private String title;
     private String description;
-    private EventType type;
+    private String type;
     private LocalDate eventDate;
     private LocalTime startTime;
     private LocalTime endTime;

@@ -4,6 +4,7 @@ package ASSRONE.backend.controller;
 import ASSRONE.backend.dto.CreateEventRequest;
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.EventRegistrationRequest;
+import ASSRONE.backend.dto.UpdateEventRequest;
 import ASSRONE.backend.service.EventService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,16 @@ public class EventController {
     public ResponseEntity<EventDto> create(@Valid @RequestBody CreateEventRequest request) {
         EventDto created = eventService.createEvent(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @GetMapping("/{id}")
+    public EventDto getById(@PathVariable Long id) {
+        return eventService.getEventById(id);
+    }
+
+    @PutMapping("/{id}")
+    public EventDto update(@PathVariable Long id, @Valid @RequestBody UpdateEventRequest request) {
+        return eventService.updateEvent(id, request);
     }
 
     @PostMapping("/{id}/register")
