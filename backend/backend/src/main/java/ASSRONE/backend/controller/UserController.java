@@ -5,6 +5,7 @@ import ASSRONE.backend.exception.InvalidCredentialsException;
 import ASSRONE.backend.model.AuthRequest;
 import ASSRONE.backend.model.AuthResponse;
 import ASSRONE.backend.service.JwtService;
+import ASSRONE.backend.service.LoginAttemptService;
 import ASSRONE.backend.service.UserInfoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,8 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Locale;
+
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -23,6 +26,7 @@ public class UserController {
     private final UserInfoService service;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final LoginAttemptService loginAttemptService;
 
     @GetMapping("/welcome")
     public String welcome() {
@@ -36,17 +40,22 @@ public class UserController {
 
     @PostMapping("/generateToken")
     public AuthResponse authenticateAndGetToken(@RequestBody AuthRequest authRequest) {
+        String normalizedEmail = normalizeEmail(authRequest.getEmail());
+
         Authentication authentication;
         try {
             authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword())
+                    new UsernamePasswordAuthenticationToken(normalizedEmail, authRequest.getPassword())
             );
         } catch (AuthenticationException ex) {
+            loginAttemptService.registerFailedAttempt(normalizedEmail);
             throw new InvalidCredentialsException("Email ou mot de passe incorrect.");
         }
         if (authentication.isAuthenticated()) {
-            String accessToken = jwtService.generateToken(authRequest.getEmail());
-            String refreshToken = jwtService.generateRefreshToken(authRequest.getEmail());
+            loginAttemptService.resetFailedAttempts(normalizedEmail);
+
+            String accessToken = jwtService.generateToken(normalizedEmail);
+            String refreshToken = jwtService.generateRefreshToken(normalizedEmail);
 
             String role = authentication.getAuthorities().stream()
                     .findFirst()
@@ -55,13 +64,17 @@ public class UserController {
 
             return new AuthResponse(
                     accessToken,
-                    authRequest.getEmail(),
+                    normalizedEmail,
                     role,
                     refreshToken
             );
         } else {
             throw new UsernameNotFoundException("Invalid user request!");
         }
+    }
+
+    private static String normalizeEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
     }
 
     @GetMapping("/user/profile")

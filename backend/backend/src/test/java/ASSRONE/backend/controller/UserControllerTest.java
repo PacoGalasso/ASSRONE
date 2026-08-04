@@ -3,11 +3,14 @@ package ASSRONE.backend.controller;
 import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
 import ASSRONE.backend.service.JwtService;
+import ASSRONE.backend.service.LoginAttemptService;
 import ASSRONE.backend.service.UserInfoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -22,9 +25,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -40,6 +46,7 @@ class UserControllerTest {
     private UserInfoService userInfoService;
     private AuthenticationManager authenticationManager;
     private JwtService jwtService;
+    private LoginAttemptService loginAttemptService;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -47,7 +54,8 @@ class UserControllerTest {
         userInfoService = mock(UserInfoService.class);
         authenticationManager = mock(AuthenticationManager.class);
         jwtService = mock(JwtService.class);
-        UserController controller = new UserController(userInfoService, jwtService, authenticationManager);
+        loginAttemptService = mock(LoginAttemptService.class);
+        UserController controller = new UserController(userInfoService, jwtService, authenticationManager, loginAttemptService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -124,6 +132,63 @@ class UserControllerTest {
                 .andExpect(content().json("""
                         {"token":"access-token","username":"membre@assrone.ch","role":"ROLE_USER","refreshToken":"refresh-token"}
                         """));
+    }
+
+    @Test
+    void echecEnregistreUneTentativeAvecLEmailNormalise() throws Exception {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("Bad credentials"));
+
+        mockMvc.perform(post("/auth/generateToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"  Membre@ASSRONE.ch  ","password":"mauvais-mot-de-passe"}
+                        """));
+
+        verify(loginAttemptService).registerFailedAttempt("membre@assrone.ch");
+    }
+
+    @Test
+    void compteVerrouilleNemetAucunJwt() throws Exception {
+        when(authenticationManager.authenticate(any())).thenThrow(new LockedException("Locked"));
+
+        mockMvc.perform(post("/auth/generateToken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(LOGIN_INVALIDE))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(jwtService);
+    }
+
+    @Test
+    void succesReinitialiseLeCompteurAvantEmissionDesTokens() throws Exception {
+        UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
+                "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+        when(jwtService.generateToken(any())).thenReturn("access-token");
+        when(jwtService.generateRefreshToken(any())).thenReturn("refresh-token");
+
+        mockMvc.perform(post("/auth/generateToken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"membre@assrone.ch","password":"bon-mot-de-passe"}
+                                """))
+                .andExpect(status().isOk());
+
+        InOrder ordre = inOrder(loginAttemptService, jwtService);
+        ordre.verify(loginAttemptService).resetFailedAttempts("membre@assrone.ch");
+        ordre.verify(jwtService).generateToken("membre@assrone.ch");
+    }
+
+    @Test
+    void panneDuServiceDeCompteurNestJamaisMasqueeEnFaux401() {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("Bad credentials"));
+        Mockito.doThrow(new DataAccessResourceFailureException("Postgres indisponible"))
+                .when(loginAttemptService).registerFailedAttempt(any());
+
+        assertThatThrownBy(() -> mockMvc.perform(post("/auth/generateToken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(LOGIN_INVALIDE)))
+                .hasRootCauseInstanceOf(DataAccessResourceFailureException.class);
     }
 
     @Test

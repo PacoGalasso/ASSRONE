@@ -11,6 +11,7 @@ import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.service.ContactEmailService;
 import ASSRONE.backend.service.EventService;
 import ASSRONE.backend.service.JwtService;
+import ASSRONE.backend.service.LoginAttemptService;
 import ASSRONE.backend.service.MembershipApplicationService;
 import ASSRONE.backend.service.UserInfoService;
 import io.github.bucket4j.TimeMeter;
@@ -57,6 +58,7 @@ class RateLimitFilterIntegrationTest {
         authenticationManager = mock(AuthenticationManager.class);
         UserInfoService userInfoService = mock(UserInfoService.class);
         JwtService jwtService = mock(JwtService.class);
+        LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         contactEmailService = mock(ContactEmailService.class);
         membershipApplicationService = mock(MembershipApplicationService.class);
         eventService = mock(EventService.class);
@@ -65,7 +67,7 @@ class RateLimitFilterIntegrationTest {
                 TimeMeter.SYSTEM_NANOTIME, com.github.benmanes.caffeine.cache.Ticker.systemTicker());
         RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService);
 
-        UserController userController = new UserController(userInfoService, jwtService, authenticationManager);
+        UserController userController = new UserController(userInfoService, jwtService, authenticationManager, loginAttemptService);
         ContactController contactController = new ContactController(contactEmailService);
         MembershipApplicationController membershipApplicationController =
                 new MembershipApplicationController(membershipApplicationService);

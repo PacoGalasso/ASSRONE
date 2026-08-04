@@ -14,6 +14,7 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Clock;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,7 +39,7 @@ class UserInfoServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new UserInfoService(repository, encoder, userMapper);
+        service = new UserInfoService(repository, encoder, userMapper, Clock.systemDefaultZone());
     }
 
     private RegisterRequest validRequest() {
