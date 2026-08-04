@@ -1,10 +1,8 @@
-export type EventType = 'FORMATION' | 'WEBINAIRE' | 'ATELIER';
-
 export interface EventItem {
   id: number;
   title: string;
   description: string;
-  type: EventType;
+  type: string;
   eventDate: string;       // ISO yyyy-MM-dd
   startTime: string;       // HH:mm:ss
   endTime: string;
@@ -15,7 +13,18 @@ export interface EventItem {
 export interface CreateEventRequest {
   title: string;
   description: string;
-  type: EventType;
+  type: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  maxParticipants: number;
+}
+
+export interface UpdateEventRequest {
+  title: string;
+  description: string;
+  type: string;
   eventDate: string;
   startTime: string;
   endTime: string;

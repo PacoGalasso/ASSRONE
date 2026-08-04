@@ -3,14 +3,15 @@ package ASSRONE.backend.service;
 import ASSRONE.backend.dto.EventRegistrationRequest;
 import ASSRONE.backend.exception.EventFullException;
 import ASSRONE.backend.model.Event;
-import ASSRONE.backend.model.EventType;
 import ASSRONE.backend.repository.EventRegistrationRepository;
 import ASSRONE.backend.repository.EventRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -50,11 +51,16 @@ class EventRegistrationConcurrencyTest {
     @Autowired
     private EventRegistrationRepository eventRegistrationRepository;
 
+    // See EventUpdateConcurrencyTest for why: avoids a real SMTP connection attempt
+    // from the AFTER_COMMIT email listener triggered by EventService#register.
+    @MockitoBean
+    private JavaMailSender mailSender;
+
     @Test
     void deuxInscriptionsSimultaneesSurUneSeulePlaceUneSeuleReussit() throws Exception {
         Event event = eventRepository.save(Event.builder()
                 .title("Atelier bénévolat")
-                .type(EventType.ATELIER)
+                .type("ATELIER")
                 .eventDate(LocalDate.now().plusDays(1))
                 .startTime(LocalTime.of(18, 0))
                 .endTime(LocalTime.of(20, 0))

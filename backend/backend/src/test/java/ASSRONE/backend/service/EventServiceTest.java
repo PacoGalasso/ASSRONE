@@ -2,7 +2,9 @@ package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.EventRegistrationRequest;
+import ASSRONE.backend.dto.UpdateEventRequest;
 import ASSRONE.backend.event.EventRegistrationConfirmedEvent;
+import ASSRONE.backend.exception.EventCapacityConflictException;
 import ASSRONE.backend.exception.EventFullException;
 import ASSRONE.backend.exception.EventRegistrationAlreadyExistsException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
@@ -84,6 +86,26 @@ class EventServiceTest {
         verify(eventRepository, never()).incrementParticipantsIfCapacityAvailable(anyLong());
         verifyNoInteractions(eventRegistrationRepository);
         verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void getEventByIdAvecUnIdInexistantLeveResourceNotFound() {
+        when(eventRepository.findById(42L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().getEventById(42L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Événement introuvable : 42");
+    }
+
+    @Test
+    void getEventByIdRetourneLeDtoCorrespondant() {
+        Event event = evenementOuvert(0);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+        when(eventMapper.toDto(event)).thenReturn(EventDto.builder().id(1L).build());
+
+        EventDto result = service().getEventById(1L);
+
+        assertThat(result.getId()).isEqualTo(1L);
     }
 
     @Test
@@ -299,5 +321,92 @@ class EventServiceTest {
         InOrder ordre = inOrder(eventRegistrationRepository, eventRepository);
         ordre.verify(eventRegistrationRepository).deleteByEventId(2L);
         ordre.verify(eventRepository).deleteById(2L);
+    }
+
+    private static UpdateEventRequest updateRequest(String type, Integer maxParticipants) {
+        return UpdateEventRequest.builder()
+                .title("Atelier bénévolat")
+                .description("Description")
+                .type(type)
+                .eventDate(LocalDate.now().plusDays(1))
+                .startTime(LocalTime.of(18, 0))
+                .endTime(LocalTime.of(20, 0))
+                .location("Local associatif")
+                .maxParticipants(maxParticipants)
+                .build();
+    }
+
+    @Test
+    void modificationDUnEvenementInexistantLeveResourceNotFound() {
+        when(eventRepository.findById(42L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().updateEvent(42L, updateRequest("Conférence", 10)))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Événement introuvable : 42");
+
+        verify(eventRepository, never()).updateMaxParticipantsIfSufficientCapacity(anyLong(), any());
+        verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void capaciteInferieureAuxInscritsLeveEventCapacityConflictEtNeSauvegardeRien() {
+        Event event = evenementOuvert(8);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+        when(eventRepository.updateMaxParticipantsIfSufficientCapacity(1L, 5)).thenReturn(0);
+
+        assertThatThrownBy(() -> service().updateEvent(1L, updateRequest("Conférence", 5)))
+                .isInstanceOf(EventCapacityConflictException.class);
+
+        verify(eventRepository, never()).save(any());
+        verify(eventMapper, never()).updateEntityFromRequest(any(), any());
+    }
+
+    @Test
+    void modificationReussieAppliqueLesChampsEtTrimLeType() {
+        Event avant = evenementOuvert(3);
+        Event refresh = evenementOuvert(3);
+        refresh.setType("  Conférence  ");
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(avant), Optional.of(refresh));
+        when(eventRepository.updateMaxParticipantsIfSufficientCapacity(1L, 15)).thenReturn(1);
+        when(eventRepository.save(refresh)).thenReturn(refresh);
+        when(eventMapper.toDto(refresh)).thenReturn(EventDto.builder().id(1L).type("Conférence").build());
+
+        EventDto result = service().updateEvent(1L, updateRequest("  Conférence  ", 15));
+
+        verify(eventMapper).updateEntityFromRequest(any(UpdateEventRequest.class), eq(refresh));
+        verify(eventRepository).save(refresh);
+        assertThat(refresh.getType()).isEqualTo("Conférence");
+        assertThat(result.getType()).isEqualTo("Conférence");
+    }
+
+    @Test
+    void capaciteAugmenteeEstAppliqueeViaLaRequeteAtomique() {
+        Event avant = evenementOuvert(3);
+        Event refresh = evenementOuvert(3);
+        refresh.setType("Atelier");
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(avant), Optional.of(refresh));
+        when(eventRepository.updateMaxParticipantsIfSufficientCapacity(1L, 50)).thenReturn(1);
+        when(eventRepository.save(refresh)).thenReturn(refresh);
+        when(eventMapper.toDto(refresh)).thenReturn(EventDto.builder().id(1L).build());
+
+        service().updateEvent(1L, updateRequest("Atelier", 50));
+
+        verify(eventRepository).updateMaxParticipantsIfSufficientCapacity(1L, 50);
+    }
+
+    @Test
+    void capaciteReduiteMaisEncoreSuffisanteEstAutorisee() {
+        Event avant = evenementOuvert(5);
+        Event refresh = evenementOuvert(5);
+        refresh.setType("Atelier");
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(avant), Optional.of(refresh));
+        when(eventRepository.updateMaxParticipantsIfSufficientCapacity(1L, 5)).thenReturn(1);
+        when(eventRepository.save(refresh)).thenReturn(refresh);
+        when(eventMapper.toDto(refresh)).thenReturn(EventDto.builder().id(1L).build());
+
+        service().updateEvent(1L, updateRequest("Atelier", 5));
+
+        verify(eventRepository).updateMaxParticipantsIfSufficientCapacity(1L, 5);
+        verify(eventRepository).save(refresh);
     }
 }

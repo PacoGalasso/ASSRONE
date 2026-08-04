@@ -23,9 +23,8 @@ public class Event {
     @Column(length = 1000)
     private String description;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private EventType type;
+    private String type;
 
     @Column(nullable = false)
     private LocalDate eventDate;
