@@ -58,7 +58,7 @@ public class MembershipEmailService {
                         + "Email : " + application.getEmail() + "\n"
                         + "Mot de passe temporaire : " + rawPassword + "\n\n"
                         + "Vous pourrez modifier ce mot de passe depuis votre profil après connexion.\n\n"
-                        + "Le paiement de la cotisation annuelle se fait sur facture, qui vous sera envoyée séparément.\n\n"
+                        + "Nous avons bien pris en compte votre paiement de la cotisation annuelle et vous en remercions.\n\n"
                         + "Bienvenue parmi nous,\nL'équipe ASSRONE"
         );
         mailSender.send(email);

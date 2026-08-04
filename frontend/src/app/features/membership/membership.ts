@@ -23,7 +23,7 @@ export class Membership {
     },
     {
       title: 'Évoluer ensemble',
-      description: 'Développez vos pratiques grâce à des formations continues et à un réseau solidaire.',
+      description: 'Développez vos pratiques grâce à des informations et à un réseau solidaire.',
     },
   ];
 
@@ -50,7 +50,7 @@ export class Membership {
     },
     {
       title: 'Effectuez le paiement',
-      description: 'Validez votre adhésion par le règlement de la cotisation annuelle.',
+      description: 'Validez votre adhésion par le règlement de la cotisation annuelle et recevez vos identifiants ASSRONE par courriel.',
       link: null,
     },
   ];

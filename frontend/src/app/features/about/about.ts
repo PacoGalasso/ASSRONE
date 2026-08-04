@@ -32,13 +32,17 @@ export class About {
     },
   ];
 
-  protected readonly president = {
-    name: 'Béatrice Amoroso Galasso',
-    role: 'Présidente',
-    initials: 'BA',
-  };
-
   protected readonly team = [
+    {
+      name: 'Béatrice Amoroso Galasso',
+      role: 'Présidente',
+      initials: 'NB',
+      description: "Diplômée en éducation spécialisée et en neuropédagogie, titulaire d’un master en enseignement spécialisé et d’un DAS en éducation précoce spécialisée, j’accompagne les équipes enseignantes qui accueillent des élèves avec un trouble du spectre de l’autisme (TSA) en proposant des pistes d’intervention concrètes et des sensibilisations ciblées adaptées aux besoins des élèves et à la réalité du terrain.\n" +
+        "\n" +
+        "En parallèle, je conçois et co-anime des ateliers d’habiletés sociales pour enfants, ainsi que des formations destinées aux adultes. Forte d’une expérience auprès d’enfants présentant des troubles du neurodéveloppement (TSA, TDAH, troubles des apprentissages, déficience intellectuelle) et des difficultés de développement, j’interviens avec une approche centrée sur l’enfant et son environnement inclusif — famille, garderie, école. \n" +
+        "\n" +
+        "Mes compétences clés : guidance interactive et accompagnement familial, outils de communication alternative et améliorée (CAA), soutien gestuel et approches psychocorporelles."
+    },
     {name: 'Helena Da Silva', role: 'Vice-présidente', initials: 'HD'},
     {name: 'Candice Floch', role: 'Co-secrétaire', initials: 'CF'},
     {name: 'Amélie Gautier Meynier', role: 'Co-secrétaire', initials: 'AG'},
@@ -49,7 +53,7 @@ export class About {
 
   protected readonly commitments = [
     'Diffuser des connaissances fiables et accessibles en neuropédagogie',
-    'Soutenir les pratiques professionnelles par des ressources, formations et échanges',
+    'Soutenir les pratiques professionnelles par des ressources, informations et échanges',
     'Sensibiliser la société aux enjeux de la neurodiversité',
     'Contribuer à la reconnaissance du métier de neuropédagogue',
     'Travailler en réseau avec les acteurs éducatifs, institutionnels et scientifiques',
