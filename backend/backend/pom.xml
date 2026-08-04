@@ -78,6 +78,20 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!-- Rate limiting (in-memory token buckets, see ratelimit package) -->
+        <!-- Not managed by spring-boot-dependencies BOM: version pinned explicitly. -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId>
+            <version>8.19.0</version>
+        </dependency>
+        <!-- Bounded, self-evicting bucket storage (expireAfterAccess) so inactive
+             IP/category buckets don't accumulate unboundedly; version BOM-managed. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Document validation -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
