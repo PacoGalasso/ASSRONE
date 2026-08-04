@@ -11,8 +11,20 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Repository
-public interface UserInfoRepository extends JpaRepository<User, Integer> {
+public interface UserInfoRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email); // Use 'email' if that is the correct field for login
+
+    long countByRole(String role);
+
+    /**
+     * Atomic per-row UPDATE for admin-driven role changes — bypasses the
+     * load/mutate/save entity-merge path entirely so the write is unambiguous
+     * and immediately flushed, matching the idiom below (registerFailedLoginAttempt)
+     * already proven correct under concurrent PostgreSQL access in this codebase.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE User u SET u.role = :role WHERE u.id = :id")
+    int updateRole(@Param("id") Long id, @Param("role") String role);
 
     /**
      * Atomic per-row UPDATE: PostgreSQL holds the row lock for the statement's
