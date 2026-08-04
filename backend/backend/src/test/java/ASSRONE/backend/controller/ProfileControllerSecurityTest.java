@@ -7,6 +7,7 @@ import ASSRONE.backend.dto.UserProfileDto;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.ratelimit.RateLimiterService;
+import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.UserProfileService;
 import org.junit.jupiter.api.Test;
@@ -44,7 +45,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         JwtAuthenticationEntryPoint.class,
         RateLimitFilter.class,
         RateLimiterService.class,
-        RateLimitConfig.class
+        RateLimitConfig.class,
+        ClientIpResolver.class
 })
 class ProfileControllerSecurityTest {
 
