@@ -20,13 +20,13 @@ export class Home implements OnInit {
   protected readonly services = [
     {
       title: 'Espace membres',
-      description: "Un espace personnel où déposer vos travaux, retrouver vos ressources et échanger avec d'autres membres du réseau.",
-      link: '/members-portal',
+      description: "Un espace personnel où visualiser des travaux et trouver des ressources.",
+      link: '/membership',
       icon: 'members',
     },
     {
-      title: 'Formations et rencontres',
-      description: "Des ateliers et conférences animés par des professionnel·le·s de terrain, pensés pour une application directe dans la pratique.",
+      title: 'Sensibilisations et rencontres',
+      description: "Des conférences et des actions de sensibilisation sur les troubles du neurodéveloppement",
       link: '/events',
       icon: 'formations',
     },

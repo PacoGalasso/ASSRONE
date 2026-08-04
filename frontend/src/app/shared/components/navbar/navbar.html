@@ -3,8 +3,6 @@
   <div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
     <div class="flex h-14 sm:h-16 justify-between items-center gap-4">
       <div class="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
-        <img src="assets/Logo.jpeg" alt="ASSRONE" class="h-10 sm:h-12 w-auto flex-shrink-0"/>
-
         <nav class="hidden md:flex gap-1 lg:gap-2">
           <a routerLink="/" routerLinkActive="text-navy border-gold"
              [routerLinkActiveOptions]="{exact: true}"
@@ -63,7 +61,8 @@
                 <img [src]="avatarUrl()" alt="Profil"
                      class="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover ring-2 ring-line"/>
               } @else {
-                <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-navy text-white flex items-center justify-center text-xs sm:text-sm font-semibold ring-2 ring-line">
+                <div
+                  class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-navy text-white flex items-center justify-center text-xs sm:text-sm font-semibold ring-2 ring-line">
                   {{ initials() }}
                 </div>
               }
