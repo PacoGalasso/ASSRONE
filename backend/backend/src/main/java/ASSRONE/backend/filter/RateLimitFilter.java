@@ -4,6 +4,7 @@ import ASSRONE.backend.ratelimit.RateLimitCategory;
 import ASSRONE.backend.ratelimit.RateLimitedRoute;
 import ASSRONE.backend.ratelimit.RateLimitedRoutes;
 import ASSRONE.backend.ratelimit.RateLimiterService;
+import ASSRONE.backend.security.ClientIpResolver;
 import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -27,9 +28,9 @@ import java.util.Optional;
  * request never reaches authentication, the controller, or triggers any email/DB
  * write/BCrypt computation.
  *
- * Client IP is request.getRemoteAddr() only: X-Forwarded-For/X-Real-IP/Forwarded
- * are deliberately ignored in this lot (trivially spoofable without a configured
- * trusted proxy) — proxy-aware IP resolution is LOT 7c.
+ * Client IP is resolved via ClientIpResolver: request.getRemoteAddr() by default,
+ * or the client IP from X-Forwarded-For only when the direct peer is a configured
+ * trusted proxy (see app.security.trusted-proxies) — never trusted blindly.
  */
 @Component
 @RequiredArgsConstructor
@@ -39,6 +40,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private final RateLimiterService rateLimiterService;
+    private final ClientIpResolver clientIpResolver;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -50,7 +52,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        ConsumptionProbe probe = rateLimiterService.tryConsume(request.getRemoteAddr(), category.get());
+        ConsumptionProbe probe = rateLimiterService.tryConsume(clientIpResolver.resolve(request), category.get());
 
         if (probe.isConsumed()) {
             filterChain.doFilter(request, response);

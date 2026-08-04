@@ -8,6 +8,7 @@ import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.MembershipApplicationDto;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
 import ASSRONE.backend.ratelimit.RateLimiterService;
+import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.service.ContactEmailService;
 import ASSRONE.backend.service.EventService;
 import ASSRONE.backend.service.JwtService;
@@ -65,7 +66,7 @@ class RateLimitFilterIntegrationTest {
 
         RateLimiterService rateLimiterService = new RateLimiterService(
                 TimeMeter.SYSTEM_NANOTIME, com.github.benmanes.caffeine.cache.Ticker.systemTicker());
-        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService);
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, new ClientIpResolver(""));
 
         UserController userController = new UserController(userInfoService, jwtService, authenticationManager, loginAttemptService);
         ContactController contactController = new ContactController(contactEmailService);
@@ -250,5 +251,79 @@ class RateLimitFilterIntegrationTest {
                             .content(body))
                     .andExpect(status().isCreated());
         }
+    }
+
+    private MockMvc mockMvcWithTrustedProxies(String trustedProxiesCsv) {
+        RateLimiterService rateLimiterService = new RateLimiterService(
+                TimeMeter.SYSTEM_NANOTIME, com.github.benmanes.caffeine.cache.Ticker.systemTicker());
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, new ClientIpResolver(trustedProxiesCsv));
+
+        UserInfoService userInfoService = mock(UserInfoService.class);
+        JwtService jwtService = mock(JwtService.class);
+        LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
+        UserController userController = new UserController(userInfoService, jwtService, authenticationManager, loginAttemptService);
+
+        return MockMvcBuilders
+                .standaloneSetup(userController)
+                .addFilters(rateLimitFilter)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
+
+    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder withIpAndForwardedFor(
+            org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder builder, String remoteAddr, String forwardedFor) {
+        return builder.with(request -> {
+            request.setRemoteAddr(remoteAddr);
+            return request;
+        }).header("X-Forwarded-For", forwardedFor);
+    }
+
+    @Test
+    void deuxClientsDerriereLeMemeProxyDeConfianceOntChacunLeurPropreLimite() throws Exception {
+        UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
+                "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+
+        MockMvc trustedMockMvc = mockMvcWithTrustedProxies("50.0.0.1");
+
+        for (int i = 0; i < 10; i++) {
+            trustedMockMvc.perform(withIpAndForwardedFor(post("/auth/generateToken"), "50.0.0.1", "60.0.0.1")
+                            .contentType("application/json")
+                            .content(LOGIN_BODY))
+                    .andExpect(status().isOk());
+        }
+        trustedMockMvc.perform(withIpAndForwardedFor(post("/auth/generateToken"), "50.0.0.1", "60.0.0.1")
+                        .contentType("application/json")
+                        .content(LOGIN_BODY))
+                .andExpect(status().isTooManyRequests());
+
+        // Second client relayed by the same trusted proxy, different forwarded IP:
+        // independent bucket, not affected by the first client's exhausted quota.
+        trustedMockMvc.perform(withIpAndForwardedFor(post("/auth/generateToken"), "50.0.0.1", "60.0.0.2")
+                        .contentType("application/json")
+                        .content(LOGIN_BODY))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void spoofingDepuisUnClientDirectNonApprouveNeContournePasLaLimite() throws Exception {
+        UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
+                "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+
+        MockMvc trustedMockMvc = mockMvcWithTrustedProxies("50.0.0.1");
+
+        // Direct client at 70.0.0.1 is not a trusted proxy: a different forwarded IP on
+        // every request must not let it dodge the limiter, since the header is ignored.
+        for (int i = 0; i < 10; i++) {
+            trustedMockMvc.perform(withIpAndForwardedFor(post("/auth/generateToken"), "70.0.0.1", "1.2.3." + i)
+                            .contentType("application/json")
+                            .content(LOGIN_BODY))
+                    .andExpect(status().isOk());
+        }
+        trustedMockMvc.perform(withIpAndForwardedFor(post("/auth/generateToken"), "70.0.0.1", "9.9.9.9")
+                        .contentType("application/json")
+                        .content(LOGIN_BODY))
+                .andExpect(status().isTooManyRequests());
     }
 }

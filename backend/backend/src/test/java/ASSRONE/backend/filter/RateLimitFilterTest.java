@@ -2,6 +2,7 @@ package ASSRONE.backend.filter;
 
 import ASSRONE.backend.ratelimit.RateLimitCategory;
 import ASSRONE.backend.ratelimit.RateLimiterService;
+import ASSRONE.backend.security.ClientIpResolver;
 import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class RateLimitFilterTest {
     private FilterChain filterChain;
 
     private RateLimitFilter filter() {
-        return new RateLimitFilter(rateLimiterService);
+        return new RateLimitFilter(rateLimiterService, new ClientIpResolver(""));
     }
 
     @Test
