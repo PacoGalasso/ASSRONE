@@ -2,6 +2,7 @@ package ASSRONE.backend.controller;
 
 import ASSRONE.backend.dto.DocumentDto;
 import ASSRONE.backend.model.Document;
+import ASSRONE.backend.model.DocumentVisibility;
 import ASSRONE.backend.service.DocumentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -30,8 +31,8 @@ public class DocumentController {
     private final DocumentService documentService;
 
     @GetMapping
-    public List<DocumentDto> getAll() {
-        return documentService.getAll();
+    public List<DocumentDto> getAll(Authentication authentication) {
+        return documentService.getVisibleDocuments(authentication);
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -39,15 +40,16 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("title") String title,
             @RequestParam(value = "description", required = false) String description,
+            @RequestParam("visibility") DocumentVisibility visibility,
             Authentication authentication) throws IOException {
 
-        DocumentDto created = documentService.upload(file, title, description, authentication.getName());
+        DocumentDto created = documentService.upload(file, title, description, authentication.getName(), visibility);
         return ResponseEntity.status(201).body(created);
     }
 
     @GetMapping("/{id}/download")
-    public ResponseEntity<Resource> download(@PathVariable Long id) throws IOException {
-        Document document = documentService.getById(id);
+    public ResponseEntity<Resource> download(@PathVariable Long id, Authentication authentication) throws IOException {
+        Document document = documentService.getVisibleById(id, authentication);
         Resource resource = documentService.loadAsResource(document);
 
         String downloadFilename = sanitizeDownloadFilename(document.getOriginalFilename());

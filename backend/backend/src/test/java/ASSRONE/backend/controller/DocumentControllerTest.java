@@ -1,21 +1,34 @@
 package ASSRONE.backend.controller;
 
+import ASSRONE.backend.dto.DocumentDto;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.model.Document;
+import ASSRONE.backend.model.DocumentVisibility;
 import ASSRONE.backend.service.DocumentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.ContentDisposition;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -49,7 +62,7 @@ class DocumentControllerTest {
     }
 
     private void stub(Document document) throws Exception {
-        when(documentService.getById(1L)).thenReturn(document);
+        when(documentService.getVisibleById(eq(1L), any())).thenReturn(document);
         when(documentService.loadAsResource(document)).thenReturn(new ByteArrayResource("contenu".getBytes()));
     }
 
@@ -307,9 +320,73 @@ class DocumentControllerTest {
 
     @Test
     void unDocumentInexistantRenvoie404() throws Exception {
-        when(documentService.getById(99L)).thenThrow(new ResourceNotFoundException("Document introuvable : 99"));
+        when(documentService.getVisibleById(eq(99L), any()))
+                .thenThrow(new ResourceNotFoundException("Document introuvable : 99"));
 
         mockMvc.perform(get("/api/documents/99/download"))
                 .andExpect(status().isNotFound());
+    }
+
+    // ===== Dépôt : visibilité obligatoire =====
+
+    private static Authentication adminAuthentication() {
+        return new UsernamePasswordAuthenticationToken(
+                "admin@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+    }
+
+    @Test
+    void uploadSansVisibiliteRenvoie400() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
+
+        mockMvc.perform(multipart("/api/documents")
+                        .file(file)
+                        .param("title", "Titre")
+                        .principal(adminAuthentication()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void uploadAvecUneVisibiliteInconnueRenvoie400() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
+
+        mockMvc.perform(multipart("/api/documents")
+                        .file(file)
+                        .param("title", "Titre")
+                        .param("visibility", "TOUT_LE_MONDE")
+                        .principal(adminAuthentication()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void uploadAvecUneVisibiliteValideDelegueAuServiceAvecLaValeurTypee() throws Exception {
+        when(documentService.upload(any(), eq("Titre"), eq("Description"), eq("admin@assrone.ch"),
+                eq(DocumentVisibility.ADMIN_ONLY)))
+                .thenReturn(DocumentDto.builder().id(1L).visibility(DocumentVisibility.ADMIN_ONLY).build());
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", "contenu".getBytes());
+
+        mockMvc.perform(multipart("/api/documents")
+                        .file(file)
+                        .param("title", "Titre")
+                        .param("description", "Description")
+                        .param("visibility", "ADMIN_ONLY")
+                        .principal(adminAuthentication()))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<DocumentVisibility> captor = ArgumentCaptor.forClass(DocumentVisibility.class);
+        verify(documentService).upload(any(), eq("Titre"), eq("Description"), eq("admin@assrone.ch"), captor.capture());
+        assertThat(captor.getValue()).isEqualTo(DocumentVisibility.ADMIN_ONLY);
+    }
+
+    // ===== Liste : délégation au service avec l'authentification =====
+
+    @Test
+    void getAllDelegueAuServiceEtRenvoieSonResultat() throws Exception {
+        when(documentService.getVisibleDocuments(any()))
+                .thenReturn(List.of(DocumentDto.builder().id(1L).visibility(DocumentVisibility.MEMBERS).build()));
+
+        mockMvc.perform(get("/api/documents").principal(adminAuthentication()))
+                .andExpect(status().isOk());
+
+        verify(documentService).getVisibleDocuments(any());
     }
 }

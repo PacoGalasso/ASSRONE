@@ -1,4 +1,6 @@
 // features/members-portal/document.model.ts
+export type DocumentVisibility = 'MEMBERS' | 'ADMIN_ONLY';
+
 export interface DocumentItem {
   id: number;
   title: string;
@@ -7,5 +9,6 @@ export interface DocumentItem {
   contentType: string;
   fileSize: number;
   uploadedBy: string;
+  visibility: DocumentVisibility;
   uploadedAt: string;
 }

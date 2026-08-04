@@ -5,6 +5,7 @@ import ASSRONE.backend.exception.InvalidDocumentException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.mapper.DocumentMapper;
 import ASSRONE.backend.model.Document;
+import ASSRONE.backend.model.DocumentVisibility;
 import ASSRONE.backend.repository.DocumentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -37,9 +40,13 @@ public class DocumentService {
     @Value("${app.upload-dir}")
     private String uploadDir;
 
-    public DocumentDto upload(MultipartFile file, String title, String description, String uploadedBy) throws IOException {
+    public DocumentDto upload(MultipartFile file, String title, String description, String uploadedBy,
+                               DocumentVisibility visibility) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new InvalidDocumentException("Le document est vide.");
+        }
+        if (visibility == null) {
+            throw new InvalidDocumentException("La visibilité du document est obligatoire.");
         }
 
         Path root = resolveStorageRoot();
@@ -69,6 +76,7 @@ public class DocumentService {
                 .contentType(MediaType.APPLICATION_PDF_VALUE)
                 .fileSize(file.getSize())
                 .uploadedBy(uploadedBy)
+                .visibility(visibility)
                 .build();
 
         Document saved;
@@ -94,11 +102,28 @@ public class DocumentService {
         }
     }
 
-    public List<DocumentDto> getAll() {
-        return documentRepository.findAllByOrderByUploadedAtDesc()
+    public List<DocumentDto> getVisibleDocuments(Authentication authentication) {
+        return documentRepository.findByVisibilityInOrderByUploadedAtDesc(visibilitiesFor(authentication))
                 .stream()
                 .map(documentMapper::toDto)
                 .toList();
+    }
+
+    public Document getVisibleById(Long id, Authentication authentication) {
+        return documentRepository.findByIdAndVisibilityIn(id, visibilitiesFor(authentication))
+                .orElseThrow(() -> new ResourceNotFoundException("Document introuvable : " + id));
+    }
+
+    private List<DocumentVisibility> visibilitiesFor(Authentication authentication) {
+        return isAdmin(authentication)
+                ? List.of(DocumentVisibility.MEMBERS, DocumentVisibility.ADMIN_ONLY)
+                : List.of(DocumentVisibility.MEMBERS);
+    }
+
+    private boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_ADMIN"::equals);
     }
 
     public Document getById(Long id) {

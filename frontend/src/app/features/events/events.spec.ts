@@ -64,4 +64,13 @@ describe('Events', () => {
     const editLink = fixture.nativeElement.querySelector('a[title="Modifier l\'événement"]');
     expect(editLink).toBeNull();
   });
+
+  it('does not render the removed static slogan', async () => {
+    // #when
+    await setup(false);
+
+    // #then
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).not.toContain('Nos prochaines formations, webinaires et ateliers');
+  });
 });

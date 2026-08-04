@@ -5,6 +5,7 @@ import ASSRONE.backend.exception.InvalidDocumentException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.mapper.DocumentMapper;
 import ASSRONE.backend.model.Document;
+import ASSRONE.backend.model.DocumentVisibility;
 import ASSRONE.backend.repository.DocumentRepository;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -23,6 +24,9 @@ import org.springframework.core.io.Resource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -31,6 +35,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -110,7 +115,7 @@ class DocumentServiceTest {
 
     @Test
     void uploadAvecUnMultipartNulEstRejete() {
-        assertThatThrownBy(() -> service.upload(null, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(null, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessage("Le document est vide.");
     }
@@ -119,7 +124,7 @@ class DocumentServiceTest {
     void uploadAvecUnMultipartVideEstRejete() {
         MockMultipartFile file = new MockMultipartFile("file", "vide.pdf", "application/pdf", new byte[0]);
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessage("Le document est vide.");
     }
@@ -128,7 +133,7 @@ class DocumentServiceTest {
     void uploadAvecUnContenuNonPdfEstRejete() {
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "ceci n'est pas un PDF".getBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(InvalidDocumentException.class);
     }
 
@@ -137,7 +142,7 @@ class DocumentServiceTest {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "corrompu.pdf", "application/pdf", "%PDF-1.7\nstructure invalide".getBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(InvalidDocumentException.class);
     }
 
@@ -146,7 +151,7 @@ class DocumentServiceTest {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "chiffre.pdf", "application/pdf", encryptedPdfBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(InvalidDocumentException.class)
                 .hasMessage("Les documents PDF protégés par mot de passe ne sont pas acceptés.");
     }
@@ -155,7 +160,7 @@ class DocumentServiceTest {
     void uploadAvecValidationEnEchecNAppelleJamaisLaSauvegardeDb() {
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "pas un pdf".getBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(InvalidDocumentException.class);
 
         verify(documentRepository, Mockito.never()).save(any());
@@ -165,7 +170,7 @@ class DocumentServiceTest {
     void uploadAvecValidationEnEchecNeLaisseAucunFichierFinal() throws IOException {
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "pas un pdf".getBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(InvalidDocumentException.class);
 
         try (var files = Files.list(uploadDir)) {
@@ -177,7 +182,7 @@ class DocumentServiceTest {
     void uploadAvecValidationEnEchecNeLaisseAucunFichierTemporaireResiduel() throws IOException {
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", "pas un pdf".getBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(InvalidDocumentException.class);
 
         try (var files = Files.list(uploadDir)) {
@@ -194,7 +199,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        instance.upload(file, "Titre", "Description", "admin@assrone.ch");
+        instance.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         InOrder inOrder = Mockito.inOrder(mockInspector, documentRepository);
         inOrder.verify(mockInspector).inspect(any());
@@ -208,7 +213,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        instance.upload(file, "Titre", "Description", "admin@assrone.ch");
+        instance.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Path> pathCaptor = ArgumentCaptor.forClass(Path.class);
         verify(mockInspector).inspect(pathCaptor.capture());
@@ -225,7 +230,7 @@ class DocumentServiceTest {
         when(mockFile.getOriginalFilename()).thenReturn("rapport.pdf");
         when(mockFile.getInputStream()).thenReturn(new ByteArrayInputStream(contenu));
 
-        service.upload(mockFile, "Titre", "Description", "admin@assrone.ch");
+        service.upload(mockFile, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         verify(mockFile, Mockito.times(1)).getInputStream();
     }
@@ -235,7 +240,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -249,7 +254,7 @@ class DocumentServiceTest {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "../../../etc/passwd.pdf", "application/pdf", validPdfBytes());
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -265,7 +270,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "text/html", validPdfBytes());
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -277,7 +282,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -289,7 +294,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport-annuel.pdf", "application/pdf", validPdfBytes());
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -302,7 +307,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -317,7 +322,7 @@ class DocumentServiceTest {
         byte[] contenu = validPdfBytes();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", contenu);
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -330,7 +335,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         try (var files = Files.list(uploadDir)) {
             assertThat(files.anyMatch(p -> p.getFileName().toString().startsWith("upload-"))).isFalse();
@@ -343,7 +348,7 @@ class DocumentServiceTest {
         byte[] contenu = validPdfBytes();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", contenu);
 
-        service.upload(file, "Rapport annuel", "Description", "admin@assrone.ch");
+        service.upload(file, "Rapport annuel", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
         verify(documentRepository).save(captor.capture());
@@ -359,7 +364,7 @@ class DocumentServiceTest {
         stubSuccessfulSave();
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        service.upload(file, "Titre", "Description", "admin@assrone.ch");
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
 
         assertThat(Files.isDirectory(uploadDir)).isTrue();
     }
@@ -373,7 +378,7 @@ class DocumentServiceTest {
         ReflectionTestUtils.setField(service, "uploadDir", obstruction.toString());
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(IOException.class)
                 .isNotInstanceOf(InvalidDocumentException.class);
 
@@ -386,7 +391,7 @@ class DocumentServiceTest {
         when(mockFile.isEmpty()).thenReturn(false);
         when(mockFile.getInputStream()).thenThrow(new IOException("échec de lecture simulé"));
 
-        assertThatThrownBy(() -> service.upload(mockFile, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(mockFile, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isInstanceOf(IOException.class)
                 .isNotInstanceOf(InvalidDocumentException.class);
 
@@ -404,7 +409,7 @@ class DocumentServiceTest {
         DocumentService instance = serviceWithInspector(mockInspector);
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        assertThatThrownBy(() -> instance.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> instance.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isSameAs(unexpected);
 
         verify(documentRepository, Mockito.never()).save(any());
@@ -419,7 +424,7 @@ class DocumentServiceTest {
         when(documentRepository.save(any())).thenThrow(dbFailure);
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isSameAs(dbFailure);
 
         try (var files = Files.list(uploadDir)) {
@@ -433,7 +438,7 @@ class DocumentServiceTest {
         when(documentRepository.save(any())).thenThrow(dbFailure);
         MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
 
-        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch"))
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS))
                 .isSameAs(dbFailure);
     }
 
@@ -531,5 +536,90 @@ class DocumentServiceTest {
         assertThatCode(() -> service.delete(1L)).doesNotThrowAnyException();
 
         verify(documentRepository).delete(document);
+    }
+
+    // ===== Visibilité =====
+
+    private static Authentication authenticationWithRole(String role) {
+        return new UsernamePasswordAuthenticationToken(
+                "user@assrone.ch", null, List.of(new SimpleGrantedAuthority(role)));
+    }
+
+    @Test
+    void uploadAvecVisibiliteNulleEstRejete() {
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", new byte[]{1});
+
+        assertThatThrownBy(() -> service.upload(file, "Titre", "Description", "admin@assrone.ch", null))
+                .isInstanceOf(InvalidDocumentException.class)
+                .hasMessage("La visibilité du document est obligatoire.");
+
+        verify(documentRepository, Mockito.never()).save(any());
+    }
+
+    @Test
+    void uploadPersisteLaVisibiliteDemandee() throws IOException {
+        stubSuccessfulSave();
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        service.upload(file, "Titre", "Description", "admin@assrone.ch", DocumentVisibility.ADMIN_ONLY);
+
+        ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(captor.capture());
+        assertThat(captor.getValue().getVisibility()).isEqualTo(DocumentVisibility.ADMIN_ONLY);
+    }
+
+    @Test
+    void getVisibleDocumentsPourUnMembreNeDemandeQueLaVisibiliteMembres() {
+        when(documentRepository.findByVisibilityInOrderByUploadedAtDesc(List.of(DocumentVisibility.MEMBERS)))
+                .thenReturn(List.of());
+
+        service.getVisibleDocuments(authenticationWithRole("ROLE_USER"));
+
+        verify(documentRepository).findByVisibilityInOrderByUploadedAtDesc(List.of(DocumentVisibility.MEMBERS));
+    }
+
+    @Test
+    void getVisibleDocumentsPourUnAdminDemandeLesDeuxVisibilites() {
+        when(documentRepository.findByVisibilityInOrderByUploadedAtDesc(
+                List.of(DocumentVisibility.MEMBERS, DocumentVisibility.ADMIN_ONLY)))
+                .thenReturn(List.of());
+
+        service.getVisibleDocuments(authenticationWithRole("ROLE_ADMIN"));
+
+        verify(documentRepository).findByVisibilityInOrderByUploadedAtDesc(
+                List.of(DocumentVisibility.MEMBERS, DocumentVisibility.ADMIN_ONLY));
+    }
+
+    @Test
+    void getVisibleByIdPourUnMembreSurUnDocumentAdminOnlyLeveResourceNotFound() {
+        when(documentRepository.findByIdAndVisibilityIn(7L, List.of(DocumentVisibility.MEMBERS)))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getVisibleById(7L, authenticationWithRole("ROLE_USER")))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Document introuvable : 7");
+    }
+
+    @Test
+    void getVisibleByIdPourUnAdminSurUnDocumentAdminOnlyReussit() {
+        Document adminOnly = existingDocument("secret");
+        adminOnly.setVisibility(DocumentVisibility.ADMIN_ONLY);
+        when(documentRepository.findByIdAndVisibilityIn(
+                7L, List.of(DocumentVisibility.MEMBERS, DocumentVisibility.ADMIN_ONLY)))
+                .thenReturn(Optional.of(adminOnly));
+
+        Document result = service.getVisibleById(7L, authenticationWithRole("ROLE_ADMIN"));
+
+        assertThat(result).isSameAs(adminOnly);
+    }
+
+    @Test
+    void getVisibleByIdAvecUnIdInexistantLeveResourceNotFound() {
+        when(documentRepository.findByIdAndVisibilityIn(42L, List.of(DocumentVisibility.MEMBERS)))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getVisibleById(42L, authenticationWithRole("ROLE_USER")))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Document introuvable : 42");
     }
 }

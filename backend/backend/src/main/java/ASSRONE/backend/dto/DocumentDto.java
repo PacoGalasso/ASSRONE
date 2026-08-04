@@ -1,6 +1,7 @@
 package ASSRONE.backend.dto;
 
 
+import ASSRONE.backend.model.DocumentVisibility;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -18,5 +19,6 @@ public class DocumentDto {
     private String contentType;
     private long fileSize;
     private String uploadedBy;
+    private DocumentVisibility visibility;
     private LocalDateTime uploadedAt;
 }
