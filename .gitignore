@@ -1,0 +1,11 @@
+# Maven build output. Only the root-level target/ is covered here — an
+# IntelliJ module misconfiguration previously caused generated MapStruct
+# sources to land under <repo-root>/target/ instead of
+# backend/backend/target/ (see backend/backend/.gitignore for that module's
+# own, already-correct target/ rule).
+/target/
+
+# IntelliJ's native build output (ProjectRootManager "output" element in
+# .idea/misc.xml points here); never produced by a Maven build, never meant
+# to be versioned.
+/out/

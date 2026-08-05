@@ -137,6 +137,15 @@
             <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- In-memory datasource for BackendApplicationTests only (Flyway disabled
+             there, so Hibernate ddl-auto=update is the sole schema owner and any
+             generic JDBC database works — see that test's Javadoc). Never used by
+             any other test or by production code. -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
