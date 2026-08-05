@@ -6,10 +6,12 @@ import ASSRONE.backend.config.SecurityConfig;
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.exception.EventCapacityConflictException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
+import ASSRONE.backend.filter.AuthCookieOriginFilter;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.security.ClientIpResolver;
+import ASSRONE.backend.security.OriginValidator;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.EventService;
 import ASSRONE.backend.service.JwtService;
@@ -42,7 +44,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         RateLimiterService.class,
         RateLimitConfig.class,
         ClientIpResolver.class,
-        RefreshCookieFactory.class
+        RefreshCookieFactory.class,
+        AuthCookieOriginFilter.class,
+        OriginValidator.class
 })
 class EventControllerSecurityTest {
 

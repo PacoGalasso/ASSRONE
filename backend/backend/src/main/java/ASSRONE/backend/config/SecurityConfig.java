@@ -1,5 +1,6 @@
 package ASSRONE.backend.config;
 
+import ASSRONE.backend.filter.AuthCookieOriginFilter;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,25 +28,31 @@ import java.util.List;
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final RateLimitFilter rateLimitFilter;
+    private final AuthCookieOriginFilter authCookieOriginFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RateLimitFilter rateLimitFilter, JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RateLimitFilter rateLimitFilter,
+                           AuthCookieOriginFilter authCookieOriginFilter, JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.rateLimitFilter = rateLimitFilter;
+        this.authCookieOriginFilter = authCookieOriginFilter;
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource) {
         http
-                // Still safe now that a cookie (the refresh token) is in play, not just the
-                // Authorization header: /auth/refresh and /auth/logout — the only two
-                // endpoints that read that cookie — are POST-only, and SameSite=Lax (see
+                // /auth/refresh and /auth/logout — the only two endpoints that read the
+                // refresh cookie automatically — are POST-only, and SameSite=Lax (see
                 // RefreshCookieFactory) already withholds the cookie from cross-site POST
-                // requests (Lax's top-level-navigation exemption only applies to GET). A
-                // forged cross-site request to either endpoint therefore arrives with no
-                // cookie at all and is rejected the same way a request with none would be —
-                // no separate CSRF token adds any protection SameSite doesn't already give.
+                // requests (Lax's top-level-navigation exemption only applies to GET). Spring's
+                // built-in CSRF token mechanism would add nothing SameSite doesn't already give
+                // here, and would break the stateless Bearer-token endpoints for no benefit
+                // (they never accept cookie-based authentication at all — see JwtAuthFilter).
+                // AuthCookieOriginFilter below is the defense-in-depth layer for the two
+                // cookie-authenticated endpoints: a strict Origin/Referer check that doesn't
+                // depend on browser SameSite enforcement and also catches same-site-but-
+                // cross-origin requests (e.g. another subdomain) that SameSite cannot.
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
@@ -86,7 +93,8 @@ public class SecurityConfig {
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterAfter(jwtAuthFilter, SecurityContextHolderFilter.class)
-                .addFilterBefore(rateLimitFilter, JwtAuthFilter.class);
+                .addFilterBefore(rateLimitFilter, JwtAuthFilter.class)
+                .addFilterBefore(authCookieOriginFilter, RateLimitFilter.class);
 
         return http.build();
     }
@@ -126,6 +134,14 @@ public class SecurityConfig {
     @Bean
     public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter rateLimitFilter) {
         FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(rateLimitFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    // Same double-registration issue as JwtAuthFilter/RateLimitFilter above.
+    @Bean
+    public FilterRegistrationBean<AuthCookieOriginFilter> authCookieOriginFilterRegistration(AuthCookieOriginFilter authCookieOriginFilter) {
+        FilterRegistrationBean<AuthCookieOriginFilter> registration = new FilterRegistrationBean<>(authCookieOriginFilter);
         registration.setEnabled(false);
         return registration;
     }

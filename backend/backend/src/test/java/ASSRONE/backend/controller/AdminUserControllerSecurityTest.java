@@ -6,11 +6,13 @@ import ASSRONE.backend.config.SecurityConfig;
 import ASSRONE.backend.exception.LastAdministratorException;
 import ASSRONE.backend.exception.SelfActionForbiddenException;
 import ASSRONE.backend.exception.UserNotFoundException;
+import ASSRONE.backend.filter.AuthCookieOriginFilter;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.model.UserRole;
 import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.security.ClientIpResolver;
+import ASSRONE.backend.security.OriginValidator;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.AdminUserManagementService;
 import ASSRONE.backend.service.JwtService;
@@ -45,7 +47,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         RateLimiterService.class,
         RateLimitConfig.class,
         ClientIpResolver.class,
-        RefreshCookieFactory.class
+        RefreshCookieFactory.class,
+        AuthCookieOriginFilter.class,
+        OriginValidator.class
 })
 class AdminUserControllerSecurityTest {
 
