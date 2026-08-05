@@ -67,9 +67,52 @@ class JwtServiceTest {
         UserDetails user = testUser("autre-membre@assrone.ch");
         JwtService jwtService = new JwtService(userDetailsServiceReturning(user), fakeSecret(48));
 
-        String token = jwtService.generateRefreshToken(user.getUsername());
+        String token = jwtService.generateRefreshToken(user.getUsername(), "un-jti-de-test");
 
         assertThat(jwtService.extractUsername(token)).isEqualTo("autre-membre@assrone.ch");
+    }
+
+    @Test
+    void unAccessTokenPorteLeTypeAccess() {
+        UserDetails user = testUser("membre@assrone.ch");
+        JwtService jwtService = new JwtService(userDetailsServiceReturning(user), fakeSecret(48));
+
+        String token = jwtService.generateToken(user.getUsername());
+
+        assertThat(jwtService.extractTokenType(token)).isEqualTo(JwtService.TOKEN_TYPE_ACCESS);
+    }
+
+    @Test
+    void unRefreshTokenPorteLeTypeRefreshEtLeJtiFourni() {
+        UserDetails user = testUser("membre@assrone.ch");
+        JwtService jwtService = new JwtService(userDetailsServiceReturning(user), fakeSecret(48));
+
+        String token = jwtService.generateRefreshToken(user.getUsername(), "jti-1234");
+
+        assertThat(jwtService.extractTokenType(token)).isEqualTo(JwtService.TOKEN_TYPE_REFRESH);
+        assertThat(jwtService.extractJti(token)).isEqualTo("jti-1234");
+    }
+
+    @Test
+    void unAccessTokenNaPasDeJti() {
+        UserDetails user = testUser("membre@assrone.ch");
+        JwtService jwtService = new JwtService(userDetailsServiceReturning(user), fakeSecret(48));
+
+        String token = jwtService.generateToken(user.getUsername());
+
+        assertThat(jwtService.extractJti(token)).isNull();
+    }
+
+    @Test
+    void deuxRefreshTokensDistinctsPortentDesJtiDistincts() {
+        UserDetails user = testUser("membre@assrone.ch");
+        JwtService jwtService = new JwtService(userDetailsServiceReturning(user), fakeSecret(48));
+
+        String tokenA = jwtService.generateRefreshToken(user.getUsername(), "jti-a");
+        String tokenB = jwtService.generateRefreshToken(user.getUsername(), "jti-b");
+
+        assertThat(jwtService.extractJti(tokenA)).isEqualTo("jti-a");
+        assertThat(jwtService.extractJti(tokenB)).isEqualTo("jti-b");
     }
 
     @Test

@@ -11,9 +11,9 @@ import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.service.ContactEmailService;
 import ASSRONE.backend.service.EventService;
-import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.LoginAttemptService;
 import ASSRONE.backend.service.MembershipApplicationService;
+import ASSRONE.backend.service.RefreshTokenService;
 import ASSRONE.backend.service.UserInfoService;
 import io.github.bucket4j.TimeMeter;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,7 +58,9 @@ class RateLimitFilterIntegrationTest {
     void setUp() {
         authenticationManager = mock(AuthenticationManager.class);
         UserInfoService userInfoService = mock(UserInfoService.class);
-        JwtService jwtService = mock(JwtService.class);
+        RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
+        when(refreshTokenService.issueTokens(any())).thenReturn(
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch"));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         contactEmailService = mock(ContactEmailService.class);
         membershipApplicationService = mock(MembershipApplicationService.class);
@@ -68,7 +70,7 @@ class RateLimitFilterIntegrationTest {
                 TimeMeter.SYSTEM_NANOTIME, com.github.benmanes.caffeine.cache.Ticker.systemTicker());
         RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, new ClientIpResolver(""));
 
-        UserController userController = new UserController(userInfoService, jwtService, authenticationManager, loginAttemptService);
+        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService);
         ContactController contactController = new ContactController(contactEmailService);
         MembershipApplicationController membershipApplicationController =
                 new MembershipApplicationController(membershipApplicationService);
@@ -259,9 +261,11 @@ class RateLimitFilterIntegrationTest {
         RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, new ClientIpResolver(trustedProxiesCsv));
 
         UserInfoService userInfoService = mock(UserInfoService.class);
-        JwtService jwtService = mock(JwtService.class);
+        RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
+        when(refreshTokenService.issueTokens(any())).thenReturn(
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch"));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
-        UserController userController = new UserController(userInfoService, jwtService, authenticationManager, loginAttemptService);
+        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService);
 
         return MockMvcBuilders
                 .standaloneSetup(userController)

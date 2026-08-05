@@ -1,14 +1,14 @@
 import {HttpClient} from '@angular/common/http';
 import {Router} from '@angular/router';
-import {Observable, tap} from 'rxjs';
-import {AuthResponse, Credentials, User} from '../models/auth.models';
+import {catchError, finalize, Observable, of, tap, throwError} from 'rxjs';
+import {AuthResponse, Credentials, RegisterRequest, RegisterResponse, User} from '../models/auth.models';
 import {computed, Injectable, signal} from '@angular/core';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AuthService {
-  private readonly API_URL = 'http://localhost:8081/auth';
+  private readonly API_URL = '/auth';
   private readonly TOKEN_KEY = 'auth_token';
   private readonly REFRESH_TOKEN_KEY = 'refresh_token';
   private readonly USER_KEY = 'auth_user';
@@ -30,16 +30,14 @@ export class AuthService {
     );
   }
 
-  register(userData: any): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.API_URL}/addNewUser`, userData).pipe(
-      tap(response => this.setAuth(response))
-    );
+  register(request: RegisterRequest): Observable<RegisterResponse> {
+    return this.http.post<RegisterResponse>(`${this.API_URL}/addNewUser`, request);
   }
 
   refreshToken(): Observable<AuthResponse> {
     const refreshToken = localStorage.getItem(this.REFRESH_TOKEN_KEY);
     if (!refreshToken) {
-      throw new Error('No refresh token available');
+      return throwError(() => new Error('No refresh token available'));
     }
     return this.http.post<AuthResponse>(`${this.API_URL}/refresh`, {refreshToken}).pipe(
       tap(response => this.setAuth(response))
@@ -47,8 +45,18 @@ export class AuthService {
   }
 
   logout(): void {
-    this.clearAuth();
-    this.router.navigate(['/']);
+    const refreshToken = localStorage.getItem(this.REFRESH_TOKEN_KEY);
+    const request$ = refreshToken
+      ? this.http.post<void>(`${this.API_URL}/logout`, {refreshToken})
+      : of(undefined);
+
+    request$.pipe(
+      catchError(() => of(undefined)),
+      finalize(() => {
+        this.clearAuth();
+        this.router.navigate(['/']);
+      })
+    ).subscribe();
   }
 
   isAdmin(): boolean {

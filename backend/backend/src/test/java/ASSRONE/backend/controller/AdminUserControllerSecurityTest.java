@@ -71,8 +71,10 @@ class AdminUserControllerSecurityTest {
         UserDetails principal = mock(UserDetails.class);
         when(principal.getUsername()).thenReturn(email);
         when(principal.isEnabled()).thenReturn(true);
+        when(principal.isAccountNonLocked()).thenReturn(true);
         org.mockito.Mockito.doReturn(List.of(new SimpleGrantedAuthority("ROLE_" + role)))
                 .when(principal).getAuthorities();
+        when(jwtService.extractTokenType(TOKEN)).thenReturn(JwtService.TOKEN_TYPE_ACCESS);
         when(jwtService.extractUsername(TOKEN)).thenReturn(email);
         when(userInfoService.loadUserByUsername(email)).thenReturn(principal);
         when(jwtService.validateToken(TOKEN, principal)).thenReturn(true);

@@ -4,18 +4,27 @@ import {BehaviorSubject, Observable, throwError} from 'rxjs';
 import {catchError, filter, switchMap, take} from 'rxjs/operators';
 import {AuthService} from '../services/auth-service';
 
+interface RefreshState {
+  token: string | null;
+  error: unknown | null;
+}
+
+const PUBLIC_AUTH_ENDPOINTS = [
+  '/auth/generateToken',
+  '/auth/addNewUser',
+  '/auth/welcome',
+  '/auth/refresh',
+  '/auth/logout'
+];
+
 @Injectable()
 export class JwtInterceptor implements HttpInterceptor {
   private authService = inject(AuthService);
   private isRefreshing = false;
-  private refreshTokenSubject: BehaviorSubject<any> = new BehaviorSubject<any>(null);
+  private refreshState$ = new BehaviorSubject<RefreshState>({token: null, error: null});
 
   intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
-    // Skip token pour les endpoints publics
-    if (request.url.includes('/auth/generateToken') ||
-      request.url.includes('/auth/addNewUser') ||
-      request.url.includes('/auth/welcome') ||
-      request.url.includes('/auth/refresh')) {
+    if (PUBLIC_AUTH_ENDPOINTS.some(endpoint => request.url.includes(endpoint))) {
       return next.handle(request);
     }
 
@@ -39,35 +48,39 @@ export class JwtInterceptor implements HttpInterceptor {
     );
   }
 
-  private handle401Error(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+  private handle401Error(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
     if (!this.isRefreshing) {
       this.isRefreshing = true;
-      this.refreshTokenSubject.next(null);
+      this.refreshState$.next({token: null, error: null});
 
       return this.authService.refreshToken().pipe(
-        switchMap((response: any) => {
+        switchMap(response => {
           this.isRefreshing = false;
-          this.refreshTokenSubject.next(response.token);
+          this.refreshState$.next({token: response.token, error: null});
           return next.handle(this.addToken(request, response.token));
         }),
-        catchError((err) => {
+        catchError(err => {
           this.isRefreshing = false;
+          this.refreshState$.next({token: null, error: err});
           this.authService.logout();
           return throwError(() => err);
         })
       );
-    } else {
-      return this.refreshTokenSubject.pipe(
-        filter(token => token != null),
-        take(1),
-        switchMap(token => {
-          return next.handle(this.addToken(request, token));
-        })
-      );
     }
+
+    return this.refreshState$.pipe(
+      filter(state => state.token !== null || state.error !== null),
+      take(1),
+      switchMap(state => {
+        if (state.error !== null) {
+          return throwError(() => state.error);
+        }
+        return next.handle(this.addToken(request, state.token as string));
+      })
+    );
   }
 
-  private addToken(request: HttpRequest<any>, token: string): HttpRequest<any> {
+  private addToken(request: HttpRequest<unknown>, token: string): HttpRequest<unknown> {
     return request.clone({
       setHeaders: {
         Authorization: `Bearer ${token}`
