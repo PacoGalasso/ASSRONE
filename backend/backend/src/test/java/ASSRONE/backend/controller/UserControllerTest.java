@@ -4,9 +4,11 @@ import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
 import ASSRONE.backend.exception.InvalidRefreshTokenException;
+import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.LoginAttemptService;
 import ASSRONE.backend.service.RefreshTokenService;
 import ASSRONE.backend.service.UserInfoService;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -24,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +41,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,6 +51,7 @@ class UserControllerTest {
             {"email":"membre@assrone.ch","password":"mauvais-mot-de-passe"}
             """;
     private static final String CORPS_ERREUR_GENERIQUE = "{\"error\":\"Email ou mot de passe incorrect.\"}";
+    private static final String REFRESH_COOKIE_NAME = "refresh_token";
 
     private UserInfoService userInfoService;
     private AuthenticationManager authenticationManager;
@@ -60,9 +65,10 @@ class UserControllerTest {
         authenticationManager = mock(AuthenticationManager.class);
         refreshTokenService = mock(RefreshTokenService.class);
         loginAttemptService = mock(LoginAttemptService.class);
-        UserController controller = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService);
+        RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory(REFRESH_COOKIE_NAME, false, "Lax", "/auth");
+        UserController controller = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(refreshCookieFactory))
                 .build();
     }
 
@@ -150,7 +156,8 @@ class UserControllerTest {
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
         when(refreshTokenService.issueTokens("membre@assrone.ch")).thenReturn(
-                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch"));
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
+                        Duration.ofDays(7)));
 
         mockMvc.perform(post("/auth/generateToken")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -159,8 +166,14 @@ class UserControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(content().json("""
-                        {"token":"access-token","username":"membre@assrone.ch","role":"ROLE_USER","refreshToken":"refresh-token"}
-                        """));
+                        {"token":"access-token","username":"membre@assrone.ch","role":"ROLE_USER"}
+                        """))
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(cookie().exists(REFRESH_COOKIE_NAME))
+                .andExpect(cookie().value(REFRESH_COOKIE_NAME, "refresh-token"))
+                .andExpect(cookie().httpOnly(REFRESH_COOKIE_NAME, true))
+                .andExpect(cookie().secure(REFRESH_COOKIE_NAME, false))
+                .andExpect(cookie().path(REFRESH_COOKIE_NAME, "/auth"));
     }
 
     @Test
@@ -194,7 +207,8 @@ class UserControllerTest {
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
         when(refreshTokenService.issueTokens(any())).thenReturn(
-                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch"));
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
+                        Duration.ofDays(7)));
 
         mockMvc.perform(post("/auth/generateToken")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -322,17 +336,18 @@ class UserControllerTest {
     @Test
     void refreshValideRetourneUnNouveauCoupleDeTokens() throws Exception {
         when(refreshTokenService.rotate("ancien-refresh-token")).thenReturn(
-                new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token", "ROLE_USER", "membre@assrone.ch"));
+                new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token", "ROLE_USER", "membre@assrone.ch",
+                        Duration.ofDays(7)));
 
         mockMvc.perform(post("/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken":"ancien-refresh-token"}
-                                """))
+                        .cookie(new Cookie(REFRESH_COOKIE_NAME, "ancien-refresh-token")))
                 .andExpect(status().isOk())
                 .andExpect(content().json("""
-                        {"token":"nouveau-access-token","username":"membre@assrone.ch","role":"ROLE_USER","refreshToken":"nouveau-refresh-token"}
-                        """));
+                        {"token":"nouveau-access-token","username":"membre@assrone.ch","role":"ROLE_USER"}
+                        """))
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(cookie().value(REFRESH_COOKIE_NAME, "nouveau-refresh-token"))
+                .andExpect(cookie().httpOnly(REFRESH_COOKIE_NAME, true));
     }
 
     @Test
@@ -341,22 +356,30 @@ class UserControllerTest {
                 .thenThrow(new InvalidRefreshTokenException("Refresh token invalide ou expiré."));
 
         mockMvc.perform(post("/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken":"token-invalide"}
-                                """))
+                        .cookie(new Cookie(REFRESH_COOKIE_NAME, "token-invalide")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json("""
+                        {"error":"Refresh token invalide ou expiré."}
+                        """))
+                .andExpect(cookie().maxAge(REFRESH_COOKIE_NAME, 0));
+    }
+
+    @Test
+    void refreshSansCookieRejeteAvec401SansAppelerLeService() throws Exception {
+        mockMvc.perform(post("/auth/refresh"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().json("""
                         {"error":"Refresh token invalide ou expiré."}
                         """));
+
+        verifyNoInteractions(refreshTokenService);
     }
 
     @Test
-    void refreshSansCorpsRejeteAvec400() throws Exception {
+    void refreshAvecCookieVideRejeteAvec401SansAppelerLeService() throws Exception {
         mockMvc.perform(post("/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isBadRequest());
+                        .cookie(new Cookie(REFRESH_COOKIE_NAME, "")))
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(refreshTokenService);
     }
@@ -364,37 +387,30 @@ class UserControllerTest {
     @Test
     void logoutAvecUnRefreshTokenLeRevoqueEtRetourne204() throws Exception {
         mockMvc.perform(post("/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken":"un-refresh-token"}
-                                """))
-                .andExpect(status().isNoContent());
+                        .cookie(new Cookie(REFRESH_COOKIE_NAME, "un-refresh-token")))
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge(REFRESH_COOKIE_NAME, 0));
 
         verify(refreshTokenService, times(1)).revoke(eq("un-refresh-token"));
     }
 
     @Test
-    void logoutSansCorpsRetourne204SansAppelerLeService() throws Exception {
+    void logoutSansCookieRetourne204EtRevoqueQuandMemeAvecUneValeurNulle() throws Exception {
         mockMvc.perform(post("/auth/logout"))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge(REFRESH_COOKIE_NAME, 0));
 
-        verifyNoInteractions(refreshTokenService);
+        verify(refreshTokenService, times(1)).revoke(null);
     }
 
     @Test
     void doubleLogoutResteIdempotent() throws Exception {
         mockMvc.perform(post("/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken":"un-refresh-token"}
-                                """))
+                        .cookie(new Cookie(REFRESH_COOKIE_NAME, "un-refresh-token")))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(post("/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken":"un-refresh-token"}
-                                """))
+                        .cookie(new Cookie(REFRESH_COOKIE_NAME, "un-refresh-token")))
                 .andExpect(status().isNoContent());
 
         verify(refreshTokenService, times(2)).revoke(eq("un-refresh-token"));

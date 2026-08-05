@@ -13,9 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.UUID;
@@ -40,7 +40,8 @@ public class RefreshTokenService {
     private final JwtService jwtService;
     private final Clock clock;
 
-    public record IssuedTokens(String accessToken, String refreshToken, String role, String email) {
+    public record IssuedTokens(String accessToken, String refreshToken, String role, String email,
+                                Duration refreshTokenMaxAge) {
     }
 
     @Transactional
@@ -146,21 +147,31 @@ public class RefreshTokenService {
         String accessToken = jwtService.generateToken(user.getEmail());
         String jti = UUID.randomUUID().toString();
         String refreshToken = jwtService.generateRefreshToken(user.getEmail(), jti);
+        Instant expirationInstant = jwtService.extractExpiration(refreshToken).toInstant();
+        // Derived from the injected clock's own zone, never ZoneId.systemDefault():
+        // that keeps this value directly comparable to every other
+        // LocalDateTime.now(clock) call in this class (the expiresAt check in
+        // rotate(), lockedUntil, ...), regardless of what zone the JVM happens
+        // to be running in.
+        LocalDateTime expiresAt = LocalDateTime.ofInstant(expirationInstant, clock.getZone());
 
         RefreshToken entity = RefreshToken.builder()
                 .userId(user.getId())
                 .jti(jti)
                 .tokenHash(hash(refreshToken))
-                .expiresAt(toLocalDateTime(jwtService.extractExpiration(refreshToken)))
+                .expiresAt(expiresAt)
                 .build();
         refreshTokenRepository.save(entity);
 
         String role = "ROLE_" + user.getRole().toUpperCase(Locale.ROOT);
-        return new IssuedTokens(accessToken, refreshToken, role, user.getEmail());
-    }
-
-    private static LocalDateTime toLocalDateTime(java.util.Date date) {
-        return LocalDateTime.ofInstant(Instant.ofEpochMilli(date.getTime()), ZoneId.systemDefault());
+        // Computed straight from Instants, never by subtracting two
+        // LocalDateTimes: a LocalDateTime carries no zone/offset information,
+        // so Duration.between two of them is only correct if both happened to
+        // be derived from the exact same zone. Instant arithmetic sidesteps
+        // that trap entirely and stays correct across DST transitions and
+        // regardless of the JVM's default time zone.
+        Duration maxAge = Duration.between(clock.instant(), expirationInstant);
+        return new IssuedTokens(accessToken, refreshToken, role, user.getEmail(), maxAge);
     }
 
     private static String hash(String rawToken) {

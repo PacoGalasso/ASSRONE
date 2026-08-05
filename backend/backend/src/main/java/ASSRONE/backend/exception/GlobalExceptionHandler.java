@@ -1,5 +1,9 @@
 package ASSRONE.backend.exception;
 
+import ASSRONE.backend.security.RefreshCookieFactory;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -10,7 +14,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 @ControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
+
+    private final RefreshCookieFactory refreshCookieFactory;
 
     @ExceptionHandler(UserAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleUserAlreadyExists(UserAlreadyExistsException ex) {
@@ -36,8 +43,14 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage()));
     }
 
+    // Always clears the refresh cookie, not just on an explicit logout: a
+    // refresh token that just failed rotation (expired, revoked, reused,
+    // wrong type, malformed...) is definitionally unusable, and leaving a
+    // now-worthless cookie sitting in the browser only invites another
+    // doomed refresh attempt later.
     @ExceptionHandler(InvalidRefreshTokenException.class)
-    public ResponseEntity<Map<String, String>> handleInvalidRefreshToken(InvalidRefreshTokenException ex) {
+    public ResponseEntity<Map<String, String>> handleInvalidRefreshToken(InvalidRefreshTokenException ex, HttpServletResponse response) {
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookieFactory.clear().toString());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("error", ex.getMessage()));
     }

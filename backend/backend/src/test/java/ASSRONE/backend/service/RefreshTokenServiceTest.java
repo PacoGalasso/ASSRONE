@@ -10,8 +10,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.Optional;
@@ -96,6 +98,7 @@ class RefreshTokenServiceTest {
         assertThat(tokens.refreshToken()).isEqualTo("refresh-token");
         assertThat(tokens.role()).isEqualTo("ROLE_USER");
         assertThat(tokens.email()).isEqualTo(EMAIL);
+        assertThat(tokens.refreshTokenMaxAge()).isEqualTo(Duration.ofSeconds(3600));
 
         var captor = org.mockito.ArgumentCaptor.forClass(RefreshToken.class);
         verify(refreshTokenRepository).save(captor.capture());
@@ -113,6 +116,122 @@ class RefreshTokenServiceTest {
                 .isInstanceOf(InvalidRefreshTokenException.class);
 
         verifyNoInteractions(refreshTokenRepository);
+    }
+
+    // ===== refreshTokenMaxAge : indépendance du fuseau horaire =====
+    //
+    // Régression : Duration.between(LocalDateTime.now(clock), expiresAt)
+    // était faux dès que expiresAt (converti via ZoneId.systemDefault()) et
+    // LocalDateTime.now(clock) (zone du clock injecté) ne partageaient pas la
+    // même zone — ce qui arrive dès qu'un test utilise un clock UTC sur une
+    // machine dont le fuseau par défaut est, par exemple, Europe/Zurich. Le
+    // calcul se fait maintenant uniquement à partir d'Instant, donc le fuseau
+    // du clock ne doit plus jamais influencer la durée obtenue.
+
+    @Test
+    void maxAgeResteDUneHeureEnUTC() {
+        Duration maxAge = maxAgeForClockAndExpiration(
+                Clock.fixed(NOW_INSTANT, ZoneOffset.UTC), NOW_INSTANT.plusSeconds(3600));
+
+        assertThat(maxAge).isEqualTo(Duration.ofHours(1));
+    }
+
+    @Test
+    void maxAgeResteDUneHeureEnEuropeZurichEnEte() {
+        // 5 août : heure d'été (CEST, UTC+2)
+        Duration maxAge = maxAgeForClockAndExpiration(
+                Clock.fixed(NOW_INSTANT, ZoneId.of("Europe/Zurich")), NOW_INSTANT.plusSeconds(3600));
+
+        assertThat(maxAge).isEqualTo(Duration.ofHours(1));
+    }
+
+    @Test
+    void maxAgeResteDUneHeureEnEuropeZurichEnHiver() {
+        // 5 janvier : heure d'hiver (CET, UTC+1)
+        Instant hiver = Instant.parse("2026-01-05T10:00:00Z");
+        Duration maxAge = maxAgeForClockAndExpiration(
+                Clock.fixed(hiver, ZoneId.of("Europe/Zurich")), hiver.plusSeconds(3600));
+
+        assertThat(maxAge).isEqualTo(Duration.ofHours(1));
+    }
+
+    @Test
+    void maxAgeResteDUneHeureAvecUnAutreDecalageHoraireSansHeureDEte() {
+        // Asia/Tokyo : UTC+9 fixe, sans heure d'été, décalage différent de Zurich
+        Duration maxAge = maxAgeForClockAndExpiration(
+                Clock.fixed(NOW_INSTANT, ZoneId.of("Asia/Tokyo")), NOW_INSTANT.plusSeconds(3600));
+
+        assertThat(maxAge).isEqualTo(Duration.ofHours(1));
+    }
+
+    @Test
+    void maxAgeResteCorrectJusteAvantLePassageALHeureDHiverEnEurope() {
+        // 25 octobre 2026, 00:30 UTC : le passage à l'heure d'hiver en Europe
+        // (dernier dimanche d'octobre) a lieu à 01:00 UTC ce jour-là.
+        Instant justAvantChangement = Instant.parse("2026-10-25T00:30:00Z");
+        Duration maxAge = maxAgeForClockAndExpiration(
+                Clock.fixed(justAvantChangement, ZoneId.of("Europe/Zurich")), justAvantChangement.plusSeconds(3600));
+
+        assertThat(maxAge).isEqualTo(Duration.ofHours(1));
+    }
+
+    @Test
+    void maxAgeNEstJamaisNegatifPourUnTokenValide() {
+        Duration maxAge = maxAgeForClockAndExpiration(
+                Clock.fixed(NOW_INSTANT, ZoneId.of("Europe/Zurich")), NOW_INSTANT.plusSeconds(3600));
+
+        assertThat(maxAge.isNegative()).isFalse();
+    }
+
+    @Test
+    void maxAgeResteCoherentAvecLInstantDExpirationDuJwt() {
+        Clock clock = Clock.fixed(NOW_INSTANT, ZoneId.of("Europe/Zurich"));
+        Instant expiration = NOW_INSTANT.plusSeconds(3600);
+
+        Duration maxAge = maxAgeForClockAndExpiration(clock, expiration);
+
+        assertThat(clock.instant().plus(maxAge)).isEqualTo(expiration);
+    }
+
+    @Test
+    void rotateCalculeAussiUnMaxAgeIndependantDuFuseauHoraireDuClock() {
+        Clock zurichClock = Clock.fixed(NOW_INSTANT, ZoneId.of("Europe/Zurich"));
+        RefreshTokenService zurichService =
+                new RefreshTokenService(refreshTokenRepository, userInfoRepository, jwtService, zurichClock);
+        User user = usableUser();
+        String presented = "refresh-token-valide-zurich";
+        String hash = sha256Hex(presented);
+        RefreshToken stored = storedToken("jti-zurich", hash,
+                LocalDateTime.ofInstant(NOW_INSTANT.plus(Duration.ofDays(1)), zurichClock.getZone()), null);
+
+        when(jwtService.extractTokenType(presented)).thenReturn(JwtService.TOKEN_TYPE_REFRESH);
+        when(jwtService.extractUsername(presented)).thenReturn(EMAIL);
+        when(jwtService.extractJti(presented)).thenReturn("jti-zurich");
+        when(refreshTokenRepository.findByJti("jti-zurich")).thenReturn(Optional.of(stored));
+        when(userInfoRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(jwtService.generateToken(EMAIL)).thenReturn("nouveau-access-token-zurich");
+        when(jwtService.generateRefreshToken(eq(EMAIL), anyString())).thenReturn("nouveau-refresh-token-zurich");
+        when(jwtService.extractExpiration("nouveau-refresh-token-zurich"))
+                .thenReturn(Date.from(NOW_INSTANT.plusSeconds(3600)));
+
+        RefreshTokenService.IssuedTokens tokens = zurichService.rotate(presented);
+
+        assertThat(tokens.refreshTokenMaxAge()).isEqualTo(Duration.ofHours(1));
+    }
+
+    private Duration maxAgeForClockAndExpiration(Clock clock, Instant expiration) {
+        RefreshTokenRepository repo = mock(RefreshTokenRepository.class);
+        UserInfoRepository userRepo = mock(UserInfoRepository.class);
+        JwtService jwt = mock(JwtService.class);
+        RefreshTokenService clockedService = new RefreshTokenService(repo, userRepo, jwt, clock);
+        User user = usableUser();
+
+        when(userRepo.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(jwt.generateToken(EMAIL)).thenReturn("access-token");
+        when(jwt.generateRefreshToken(eq(EMAIL), anyString())).thenReturn("refresh-token");
+        when(jwt.extractExpiration("refresh-token")).thenReturn(Date.from(expiration));
+
+        return clockedService.issueTokens(EMAIL).refreshTokenMaxAge();
     }
 
     // ===== rotate : succès + rotation =====
@@ -138,6 +257,7 @@ class RefreshTokenServiceTest {
 
         assertThat(tokens.accessToken()).isEqualTo("nouveau-access-token");
         assertThat(tokens.refreshToken()).isEqualTo("nouveau-refresh-token");
+        assertThat(tokens.refreshTokenMaxAge()).isEqualTo(Duration.ofSeconds(3600));
         verify(refreshTokenRepository).revokeByJti(eq("jti-1"), any());
         verify(refreshTokenRepository).save(any(RefreshToken.class));
     }

@@ -2,6 +2,7 @@ package ASSRONE.backend.controller;
 
 import ASSRONE.backend.dto.CommitteeMemberDto;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
+import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.service.CommitteeMemberService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,7 +35,7 @@ class CommitteeMemberControllerTest {
         committeeMemberService = mock(CommitteeMemberService.class);
         CommitteeMemberController controller = new CommitteeMemberController(committeeMemberService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(new RefreshCookieFactory("refresh_token", false, "Lax", "/auth")))
                 .build();
     }
 

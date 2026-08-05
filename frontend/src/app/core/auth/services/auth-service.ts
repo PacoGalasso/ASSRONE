@@ -1,6 +1,6 @@
 import {HttpClient} from '@angular/common/http';
 import {Router} from '@angular/router';
-import {catchError, finalize, Observable, of, tap, throwError} from 'rxjs';
+import {catchError, finalize, Observable, of, tap} from 'rxjs';
 import {AuthResponse, Credentials, RegisterRequest, RegisterResponse, User} from '../models/auth.models';
 import {computed, Injectable, signal} from '@angular/core';
 
@@ -10,7 +10,6 @@ import {computed, Injectable, signal} from '@angular/core';
 export class AuthService {
   private readonly API_URL = '/auth';
   private readonly TOKEN_KEY = 'auth_token';
-  private readonly REFRESH_TOKEN_KEY = 'refresh_token';
   private readonly USER_KEY = 'auth_user';
 
   private tokenSignal = signal<string | null>(this.loadToken());
@@ -25,7 +24,7 @@ export class AuthService {
   }
 
   login(credentials: Credentials): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.API_URL}/generateToken`, credentials).pipe(
+    return this.http.post<AuthResponse>(`${this.API_URL}/generateToken`, credentials, {withCredentials: true}).pipe(
       tap(response => this.setAuth(response))
     );
   }
@@ -34,23 +33,20 @@ export class AuthService {
     return this.http.post<RegisterResponse>(`${this.API_URL}/addNewUser`, request);
   }
 
+  // The refresh token itself is never available to this code: it lives in an
+  // HttpOnly cookie the browser attaches automatically (withCredentials),
+  // never in a body we could read or send.
   refreshToken(): Observable<AuthResponse> {
-    const refreshToken = localStorage.getItem(this.REFRESH_TOKEN_KEY);
-    if (!refreshToken) {
-      return throwError(() => new Error('No refresh token available'));
-    }
-    return this.http.post<AuthResponse>(`${this.API_URL}/refresh`, {refreshToken}).pipe(
+    return this.http.post<AuthResponse>(`${this.API_URL}/refresh`, null, {withCredentials: true}).pipe(
       tap(response => this.setAuth(response))
     );
   }
 
+  // Always calls the backend, even with no visible client-side state to check:
+  // whether a refresh cookie exists isn't something this code can ever know,
+  // and logout must clear it server-side (and in the browser) regardless.
   logout(): void {
-    const refreshToken = localStorage.getItem(this.REFRESH_TOKEN_KEY);
-    const request$ = refreshToken
-      ? this.http.post<void>(`${this.API_URL}/logout`, {refreshToken})
-      : of(undefined);
-
-    request$.pipe(
+    this.http.post<void>(`${this.API_URL}/logout`, null, {withCredentials: true}).pipe(
       catchError(() => of(undefined)),
       finalize(() => {
         this.clearAuth();
@@ -78,7 +74,6 @@ export class AuthService {
     this.userSignal.set(user);
 
     localStorage.setItem(this.TOKEN_KEY, response.token);
-    localStorage.setItem(this.REFRESH_TOKEN_KEY, response.refreshToken);
     localStorage.setItem(this.USER_KEY, JSON.stringify(user));
   }
 
@@ -87,7 +82,6 @@ export class AuthService {
     this.userSignal.set(null);
 
     localStorage.removeItem(this.TOKEN_KEY);
-    localStorage.removeItem(this.REFRESH_TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);
   }
 

@@ -1,6 +1,7 @@
 package ASSRONE.backend.controller;
 
 import ASSRONE.backend.exception.GlobalExceptionHandler;
+import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.exception.InvalidAvatarException;
 import ASSRONE.backend.service.UserProfileService;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +29,7 @@ class ProfileControllerTest {
         userProfileService = mock(UserProfileService.class);
         ProfileController controller = new ProfileController(userProfileService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(new RefreshCookieFactory("refresh_token", false, "Lax", "/auth")))
                 .build();
     }
 

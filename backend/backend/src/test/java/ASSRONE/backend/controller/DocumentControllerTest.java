@@ -2,6 +2,7 @@ package ASSRONE.backend.controller;
 
 import ASSRONE.backend.dto.DocumentDto;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
+import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.model.Document;
 import ASSRONE.backend.model.DocumentVisibility;
@@ -44,7 +45,7 @@ class DocumentControllerTest {
         documentService = mock(DocumentService.class);
         DocumentController controller = new DocumentController(documentService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(new RefreshCookieFactory("refresh_token", false, "Lax", "/auth")))
                 .build();
     }
 
