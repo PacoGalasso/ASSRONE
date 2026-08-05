@@ -4,10 +4,12 @@ import ASSRONE.backend.config.JwtAuthenticationEntryPoint;
 import ASSRONE.backend.config.RateLimitConfig;
 import ASSRONE.backend.config.SecurityConfig;
 import ASSRONE.backend.dto.UserProfileDto;
+import ASSRONE.backend.filter.AuthCookieOriginFilter;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.security.ClientIpResolver;
+import ASSRONE.backend.security.OriginValidator;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.UserProfileService;
@@ -48,7 +50,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         RateLimiterService.class,
         RateLimitConfig.class,
         ClientIpResolver.class,
-        RefreshCookieFactory.class
+        RefreshCookieFactory.class,
+        AuthCookieOriginFilter.class,
+        OriginValidator.class
 })
 class ProfileControllerSecurityTest {
 
