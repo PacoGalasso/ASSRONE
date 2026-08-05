@@ -38,6 +38,14 @@ build/
 # shared, secret-free file committed on purpose (see its own header comment).
 src/main/resources/application-local.properties
 
+# Private keys, certificates, keystores — none exist in this repo today, but nothing
+# should ever silently start tracking one if a TLS/signing use case is added later.
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
 
 # IDE
 .idea/

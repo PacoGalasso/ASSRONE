@@ -33,8 +33,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ProductionStartupSafetyTest {
 
     // 48 random bytes, Base64-encoded (HS384 key length required by JwtService).
-    // Test-only signing key, never used outside this isolated test.
-    private static final String VALID_JWT_SECRET = "zTjvaDrwlDQTMdHQ9vSfqXGwdkGSXJtT09uCOP+KLfO0RmyO617AZi/hK7VKCiKe";
+    // Test-only signing key, never used outside this isolated test. Deliberately NOT
+    // the same value as BackendApplicationTests'/application-local.properties' shared
+    // test secret: ProductionSecurityGuard now refuses that specific value under the
+    // production profile (see productionAvecSecretJwtDeTestConnuRefuseDeDemarrer below),
+    // and every other test in this file needs production startup to actually succeed.
+    private static final String VALID_JWT_SECRET = "dl7LgN70O7lO5bfvdzeP6w+S4qbEOnzqBrX2tBitUL37dVP7+8KiN1274N5jFGJZ";
+
+    // The exact value committed in BackendApplicationTests/application-local.properties
+    // (test scope) — public in this repository, so ProductionSecurityGuard refuses it
+    // under the production profile regardless of its structural validity.
+    private static final String KNOWN_TEST_JWT_SECRET = "zTjvaDrwlDQTMdHQ9vSfqXGwdkGSXJtT09uCOP+KLfO0RmyO617AZi/hK7VKCiKe";
 
     private static SpringApplicationBuilder baseBuilder(String dbName) {
         return new SpringApplicationBuilder(BackendApplication.class)
@@ -136,6 +145,22 @@ class ProductionStartupSafetyTest {
         properties.put("app.security.refresh-cookie.secure", "true");
         properties.put("app.security.cors.allowed-origins", "https://assrone.ch");
         SpringApplicationBuilder builder = baseBuilder("production-startup-safety-no-jwt").profiles("production");
+
+        assertThatThrownBy(() -> runWithSystemProperties(builder, properties, context -> { }))
+                .isInstanceOf(BeanCreationException.class)
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .rootCause().hasMessageContaining("app.jwt.secret");
+    }
+
+    @Test
+    void productionAvecSecretJwtDeTestConnuRefuseDeDemarrer() {
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("spring.jpa.hibernate.ddl-auto", "update");
+        properties.put("spring.flyway.baseline-on-migrate", "true");
+        properties.put("app.jwt.secret", KNOWN_TEST_JWT_SECRET);
+        properties.put("app.security.refresh-cookie.secure", "true");
+        properties.put("app.security.cors.allowed-origins", "https://assrone.ch");
+        SpringApplicationBuilder builder = baseBuilder("production-startup-safety-known-secret").profiles("production");
 
         assertThatThrownBy(() -> runWithSystemProperties(builder, properties, context -> { }))
                 .isInstanceOf(BeanCreationException.class)

@@ -1,14 +1,25 @@
+# Local development database only — never used in production. A real deployment
+# provides its own managed/hosted PostgreSQL and points the backend at it via
+# SPRING_DATASOURCE_URL/USERNAME/PASSWORD (see .env.example); nothing in this file
+# is read by, or relevant to, a production deployment.
 services:
   postgres:
     image: postgres:15
     container_name: postgres-assrone
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: assrone_db
+      # Overridable so a developer can pick a different local password; the
+      # defaults below are only ever a throwaway local container, never a real
+      # credential — see the file-level comment above.
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-assrone_db}
     ports:
+      # Host-side port only, so a backend running outside Docker (the normal local
+      # dev setup here) and/or a local DB client can reach this container.
       - "5433:5432"
     volumes:
+      # Named volume: persists data across `docker compose down`/`up` so a developer
+      # doesn't lose local data between sessions. Remove with `docker compose down -v`.
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d assrone_db"]

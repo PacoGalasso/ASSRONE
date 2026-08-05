@@ -1,0 +1,128 @@
+# EXAMPLE reverse-proxy configuration — not deployed, not read by anything in this
+# repository, and not a description of any infrastructure that currently exists.
+# It documents the recommended topology from the CSP-hardening lot's final report:
+# Angular served as static files, /api/ and /auth/ relayed to the Spring Boot
+# backend, both under the SAME public origin (the frontend's HTTP calls are all
+# relative — see frontend/proxy.conf.json and the CSP lot's audit — so this is not
+# optional: they will not work served from two different origins without also
+# reworking CORS and every API call).
+#
+# Every placeholder below (ASSRONE_DOMAIN, certificate paths, upstream addresses)
+# is fictitious. Replace them with real values only when actually deploying — do
+# not commit real domains, certificate paths, or credentials into a file like this.
+#
+# Source of truth for security headers: this file owns them for the static
+# frontend (index.html, JS/CSS/asset files) because Spring Boot does not serve
+# those (see the CSP lot's audit — no reverse proxy exists in the repo, so nothing
+# currently applies these headers to the frontend at all). For /api/ and /auth/,
+# Spring Security already sets the identical headers on every response (see
+# SecurityConfig/ContentSecurityPolicy) — this file deliberately does NOT repeat
+# them on the proxied locations, to avoid two different layers silently disagreeing
+# or the browser receiving the same header twice.
+
+# ---- HTTP: redirect to HTTPS only, nothing else served in plaintext ----------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ASSRONE_DOMAIN;
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ASSRONE_DOMAIN;
+
+    ssl_certificate     /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+
+    # Upload size in sync with the backend's own limits (see
+    # spring.servlet.multipart.max-file-size / max-request-size in
+    # application.properties) — a stricter proxy limit would reject uploads Spring
+    # would otherwise accept.
+    client_max_body_size 20m;
+
+    # Conservative, not tuned to a specific real workload — adjust for actual
+    # observed request patterns before relying on these in a real deployment.
+    proxy_connect_timeout 5s;
+    proxy_send_timeout    30s;
+    proxy_read_timeout    30s;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # Trust the proxy's own view of the connection, not whatever a client sends:
+    # Host is always the value this server block matched on, X-Forwarded-Proto is
+    # always https (this block never terminates plaintext), and X-Forwarded-For is
+    # built from $remote_addr chained onto any existing value rather than replaced
+    # by a client-supplied one outright. The backend's own ClientIpResolver only
+    # trusts X-Forwarded-For at all when app.security.trusted-proxies lists this
+    # proxy's address — configure that alongside this file, not instead of it.
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+
+    # ---- Backend, not exposed directly to the internet in this topology -----------
+    # ASSRONE_BACKEND_UPSTREAM is e.g. 127.0.0.1:8081 or an internal service name —
+    # never a publicly routable address in a real deployment.
+    location /api/ {
+        proxy_pass http://ASSRONE_BACKEND_UPSTREAM;
+    }
+
+    location /auth/ {
+        proxy_pass http://ASSRONE_BACKEND_UPSTREAM;
+    }
+
+    location /health {
+        proxy_pass http://ASSRONE_BACKEND_UPSTREAM;
+    }
+
+    # ---- Angular static files -------------------------------------------------------
+    root /var/www/assrone/browser;
+
+    # Security headers for the frontend only (see file-level comment above for why
+    # /api/ and /auth/ are excluded). "always" so they're still sent on error
+    # responses (4xx/5xx from this block), not just 2xx. Values kept byte-for-byte
+    # identical to ContentSecurityPolicy.java / SecurityConfig.java so the two
+    # layers never disagree about what's actually allowed.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; script-src-attr 'none'; style-src 'self'; img-src 'self' blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "accelerometer=(), autoplay=(), bluetooth=(), camera=(), clipboard-read=(), clipboard-write=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), picture-in-picture=(), usb=()" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+
+    # Hashed build output (main-XXXXXXXX.js, styles-XXXXXXXX.css, chunk-*.js) is
+    # safe to cache indefinitely: a new build always ships under a new hash, so a
+    # stale cached copy of one of these files is never served under a URL a new
+    # deployment actually references.
+    location ~* \.(?:js|css|woff2?|svg|png|jpg|jpeg|ico)$ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # index.html itself must never be cached: it is the one file whose content
+    # changes on every deploy without changing its own URL (it is what references
+    # the newly-hashed asset filenames above).
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # SPA fallback: any path that isn't a real static file goes to index.html so
+    # Angular's own router handles it client-side (e.g. a deep link to /events/42
+    # reloaded directly).
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# ---- Logs -----------------------------------------------------------------------
+# Keep this proxy's access/error logs separate from the backend's own application
+# logs (different files/streams) — the two run in different processes/containers
+# in this topology, so this happens naturally as long as neither is redirected
+# into the other. Never log full request bodies or the Authorization header value
+# here; nginx's default combined log format does neither.
