@@ -33,7 +33,10 @@ build/
 .vscode/
 # Environment variables
 .env
-application-local.properties
+# A developer's personal local overrides, never committed. Scoped to src/main so it
+# doesn't also match src/test/resources/application-local.properties, which is a
+# shared, secret-free file committed on purpose (see its own header comment).
+src/main/resources/application-local.properties
 
 
 # IDE
