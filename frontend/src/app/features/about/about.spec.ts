@@ -53,7 +53,7 @@ describe('About', () => {
     await setup();
 
     // #then
-    const grid = fixture.nativeElement.querySelector('.max-w-5xl.mx-auto.grid');
+    const grid = fixture.nativeElement.querySelector('.max-w-6xl.mx-auto.grid');
     expect(grid).not.toBeNull();
     expect(grid.className).toContain('sm:grid-cols-2');
     expect(grid.className).toContain('lg:grid-cols-3');
@@ -73,7 +73,7 @@ describe('About', () => {
     await setup();
 
     // #then
-    const cards = fixture.nativeElement.querySelectorAll('.max-w-5xl.mx-auto.grid h3');
+    const cards = fixture.nativeElement.querySelectorAll('.max-w-6xl.mx-auto.grid h3');
     expect(cards.length).toBe(3);
   });
 
