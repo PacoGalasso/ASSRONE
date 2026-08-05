@@ -7,6 +7,7 @@ import ASSRONE.backend.event.MembershipApplicationSubmittedEvent;
 import ASSRONE.backend.exception.MembershipApplicationAlreadyPendingException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.exception.UserAlreadyExistsException;
+import ASSRONE.backend.exception.UsernameAlreadyExistsException;
 import ASSRONE.backend.mapper.MembershipApplicationMapper;
 import ASSRONE.backend.model.ApplicationStatus;
 import ASSRONE.backend.model.MembershipApplication;
@@ -30,8 +31,10 @@ import java.util.Locale;
 public class MembershipApplicationService {
 
     private static final String PENDING_UNIQUE_CONSTRAINT_NAME = "uk_membership_application_pending_email";
+    private static final String USERNAME_UNIQUE_CONSTRAINT_NAME = "uk_users_username";
     private static final String PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
     private static final int PASSWORD_LENGTH = 12;
+    private static final int MAX_USERNAME_SUFFIX_ATTEMPTS = 1000;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final MembershipApplicationRepository repository;
@@ -87,6 +90,38 @@ public class MembershipApplicationService {
         return false;
     }
 
+    private static boolean isUsernameUniqueConstraintViolation(DataIntegrityViolationException ex) {
+        Throwable cause = ex.getCause();
+        if (cause instanceof ConstraintViolationException constraintViolationException) {
+            String constraintName = constraintViolationException.getConstraintName();
+            return constraintName != null && constraintName.equalsIgnoreCase(USERNAME_UNIQUE_CONSTRAINT_NAME);
+        }
+        return false;
+    }
+
+    /**
+     * Preserves the email's local part as the username when it's free (the
+     * existing, expected behavior), and only appends a numeric suffix once it
+     * collides with an already-registered username — never on name/surname,
+     * only on the generated username itself. This is a best-effort pre-check:
+     * the users.username unique constraint (V6 migration) is what actually
+     * guarantees no two accounts ever end up with the same username, even
+     * under a lost race against this check.
+     */
+    private String findAvailableUsername(String baseUsername) {
+        if (!userInfoRepository.existsByUsername(baseUsername)) {
+            return baseUsername;
+        }
+        for (int suffix = 2; suffix <= MAX_USERNAME_SUFFIX_ATTEMPTS; suffix++) {
+            String candidate = baseUsername + suffix;
+            if (!userInfoRepository.existsByUsername(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Impossible de générer un nom d'utilisateur unique à partir de '"
+                + baseUsername + "' après " + MAX_USERNAME_SUFFIX_ATTEMPTS + " tentatives.");
+    }
+
     public List<MembershipApplicationDto> getAll() {
         return repository.findAllByOrderBySubmittedAtDesc()
                 .stream()
@@ -107,10 +142,11 @@ public class MembershipApplicationService {
         String[] nameParts = application.getFullName().trim().split("\\s+", 2);
         String firstName = nameParts[0];
         String lastName = nameParts.length > 1 ? nameParts[1] : "";
+        String username = findAvailableUsername(application.getEmail().split("@")[0]);
 
         User user = User.builder()
                 .email(application.getEmail())
-                .username(application.getEmail().split("@")[0])
+                .username(username)
                 .password(passwordEncoder.encode(rawPassword))
                 .firstName(firstName)
                 .lastName(lastName)
@@ -119,11 +155,18 @@ public class MembershipApplicationService {
         try {
             userInfoRepository.save(user);
         } catch (DataIntegrityViolationException ex) {
-            // The pre-check above (findByEmail) can't see a concurrent accept()
-            // for the same email landing between that read and this write; the
-            // unique constraint on users.email is the real guarantee, and this
-            // translates its violation into the same clean 409 the pre-check
-            // already produces for the non-concurrent case.
+            // The pre-checks above (findByEmail, findAvailableUsername) can't see
+            // a concurrent accept()/registration landing between that read and
+            // this write; the unique constraints on users.email and
+            // users.username are the real guarantee. A username collision here
+            // means another request grabbed the exact candidate we just picked
+            // as available, microseconds earlier — distinguished from an email
+            // collision by constraint name, since both can fail on this same
+            // INSERT and they mean different things to the caller.
+            if (isUsernameUniqueConstraintViolation(ex)) {
+                throw new UsernameAlreadyExistsException(
+                        "Une collision de nom d'utilisateur est survenue pendant la création du compte. Veuillez réessayer.");
+            }
             throw new UserAlreadyExistsException("Un compte existe déjà avec l'email " + application.getEmail());
         }
 

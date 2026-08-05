@@ -76,6 +76,10 @@ class FlywayRefreshTokensMigrationTest {
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("4")
+                // Stops right after V5, the migration under test. Without this, migrate()
+                // would keep applying every later migration on the classpath (V6+), which
+                // targets a column (users.username) this test's minimal schema never creates.
+                .target("5")
                 .load();
     }
 
