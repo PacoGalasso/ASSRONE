@@ -3,6 +3,7 @@ package ASSRONE.backend.config;
 import ASSRONE.backend.filter.AuthCookieOriginFilter;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
+import ASSRONE.backend.security.ContentSecurityPolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -15,7 +16,10 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.security.web.header.HeaderWriterFilter;
+import org.springframework.security.web.header.writers.CrossOriginOpenerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.CrossOriginResourcePolicyHeaderWriter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -26,6 +30,18 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    // No feature in this list is used anywhere in the frontend (verified during
+    // the audit for this lot: no camera/microphone/geolocation/payment API call,
+    // no clipboard/USB/Bluetooth/sensor access, no fullscreen or autoplay usage)
+    // — every one is explicitly denied rather than left to the browser's default.
+    private static final String PERMISSIONS_POLICY = String.join(", ",
+            "accelerometer=()", "autoplay=()", "bluetooth=()", "camera=()",
+            "clipboard-read=()", "clipboard-write=()", "fullscreen=()", "geolocation=()",
+            "gyroscope=()", "magnetometer=()", "microphone=()", "payment=()",
+            "picture-in-picture=()", "usb=()"
+    );
+
     private final JwtAuthFilter jwtAuthFilter;
     private final RateLimitFilter rateLimitFilter;
     private final AuthCookieOriginFilter authCookieOriginFilter;
@@ -40,7 +56,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource) {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http, CorsConfigurationSource corsConfigurationSource,
+            @Value("${app.security.csp.upgrade-insecure-requests:false}") boolean upgradeInsecureRequests) {
         http
                 // /auth/refresh and /auth/logout — the only two endpoints that read the
                 // refresh cookie automatically — are POST-only, and SameSite=Lax (see
@@ -55,6 +73,17 @@ public class SecurityConfig {
                 // cross-origin requests (e.g. another subdomain) that SameSite cannot.
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                // X-Content-Type-Options: nosniff and X-Frame-Options: DENY are already
+                // Spring Security's own defaults (verified empirically — no defaultsDisabled()
+                // call here, so they stay on) and are not repeated below. Everything below is
+                // genuinely absent otherwise.
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(ContentSecurityPolicy.directives(upgradeInsecureRequests)))
+                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                        .permissionsPolicyHeader(permissions -> permissions.policy(PERMISSIONS_POLICY))
+                        .crossOriginOpenerPolicy(coop -> coop.policy(CrossOriginOpenerPolicyHeaderWriter.CrossOriginOpenerPolicy.SAME_ORIGIN))
+                        .crossOriginResourcePolicy(corp -> corp.policy(CrossOriginResourcePolicyHeaderWriter.CrossOriginResourcePolicy.SAME_ORIGIN))
+                )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
@@ -92,9 +121,19 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .addFilterAfter(jwtAuthFilter, SecurityContextHolderFilter.class)
-                .addFilterBefore(rateLimitFilter, JwtAuthFilter.class)
-                .addFilterBefore(authCookieOriginFilter, RateLimitFilter.class);
+                // Chained relative to each other, anchored at the front to HeaderWriterFilter
+                // rather than to SecurityContextHolderFilter as before: AuthCookieOriginFilter
+                // and RateLimitFilter both write a response directly (403/429) without going
+                // through Spring Security's AuthenticationEntryPoint/AccessDeniedHandler
+                // machinery, and HeaderWriterFilter only covers a response if it runs before
+                // whatever writes to it. Without this explicit anchor, a rejection from either
+                // filter left every security header (CSP, nosniff, etc.) off the response —
+                // confirmed by a failing test before this line was added. SecurityContextHolderFilter
+                // itself still runs before HeaderWriterFilter in Spring Security's own default
+                // ordering, so JwtAuthFilter — last in this chain — still runs after it too.
+                .addFilterAfter(authCookieOriginFilter, HeaderWriterFilter.class)
+                .addFilterAfter(rateLimitFilter, AuthCookieOriginFilter.class)
+                .addFilterAfter(jwtAuthFilter, RateLimitFilter.class);
 
         return http.build();
     }
