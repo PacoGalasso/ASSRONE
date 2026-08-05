@@ -72,12 +72,31 @@ class FlywayDocumentsVisibilityMigrationTest {
         }
     }
 
+    /**
+     * For queries whose single result column is a Postgres boolean (e.g.
+     * "col = 'x'" or "is_nullable = 'NO'"), not a COUNT(*). The Postgres JDBC
+     * driver returns 't'/'f' for boolean columns, which getLong() cannot
+     * parse — hence a dedicated accessor instead of reusing countRows().
+     */
+    private boolean queryBoolean(String jdbcUrl, String query) throws SQLException {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, postgres.getUsername(), postgres.getPassword());
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            rs.next();
+            return rs.getBoolean(1);
+        }
+    }
+
     private Flyway flywayFor(String jdbcUrl) {
         return Flyway.configure()
                 .dataSource(jdbcUrl, postgres.getUsername(), postgres.getPassword())
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("2")
+                // Stops right after V3, the migration under test. Without this, migrate()
+                // would keep applying every later migration on the classpath (V4+), each of
+                // which targets a table this test's minimal schema never creates.
+                .target("3")
                 .load();
     }
 
@@ -101,10 +120,10 @@ class FlywayDocumentsVisibilityMigrationTest {
         assertThat(countRows(jdbcUrl,
                 "SELECT COUNT(*) FROM documents WHERE title = 'Statuts' AND stored_filename = 'aaaa-1111'"))
                 .isEqualTo(1);
-        assertThat(countRows(jdbcUrl,
+        assertThat(queryBoolean(jdbcUrl,
                 "SELECT is_nullable = 'NO' AS not_null FROM information_schema.columns "
                         + "WHERE table_name = 'documents' AND column_name = 'visibility'"))
-                .isEqualTo(1);
+                .isTrue();
 
         assertThatThrownBy(() -> execute(jdbcUrl, """
                 INSERT INTO documents (title, original_filename, stored_filename, content_type, file_size, uploaded_by, uploaded_at)
@@ -121,9 +140,9 @@ class FlywayDocumentsVisibilityMigrationTest {
         flywayFor(jdbcUrl).migrate();
 
         assertThat(countRows(jdbcUrl, "SELECT COUNT(*) FROM documents")).isEqualTo(0);
-        assertThat(countRows(jdbcUrl,
+        assertThat(queryBoolean(jdbcUrl,
                 "SELECT is_nullable = 'NO' AS not_null FROM information_schema.columns "
                         + "WHERE table_name = 'documents' AND column_name = 'visibility'"))
-                .isEqualTo(1);
+                .isTrue();
     }
 }

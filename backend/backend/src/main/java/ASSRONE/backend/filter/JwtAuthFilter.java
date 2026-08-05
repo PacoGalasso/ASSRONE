@@ -39,7 +39,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
             try {
-                username = jwtService.extractUsername(token);
+                // Only an access token may authenticate a request — a refresh
+                // token is structurally a valid, signed JWT too, but it must
+                // never be usable as a Bearer credential (that would let a
+                // long-lived refresh token stand in for a short-lived access
+                // token). Extracting the type first, before the username,
+                // means a refresh token is rejected here without ever
+                // reaching loadUserByUsername.
+                if (!JwtService.TOKEN_TYPE_ACCESS.equals(jwtService.extractTokenType(token))) {
+                    token = null;
+                } else {
+                    username = jwtService.extractUsername(token);
+                }
             } catch (JwtException | IllegalArgumentException expiredOrInvalidToken) {
                 // Token expiré ou invalide : cas normal, on laisse la requête continuer
                 // sans authentification — Spring Security renverra 401/403 proprement,
@@ -53,7 +64,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
                 boolean valid = jwtService.validateToken(token, userDetails);
-                if (valid && userDetails.isEnabled()) {
+                if (valid && userDetails.isEnabled() && userDetails.isAccountNonLocked()) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,
                             null,

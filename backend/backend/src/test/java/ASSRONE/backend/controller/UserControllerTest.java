@@ -1,9 +1,11 @@
 package ASSRONE.backend.controller;
 
 import ASSRONE.backend.dto.RegisterRequest;
+import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
-import ASSRONE.backend.service.JwtService;
+import ASSRONE.backend.exception.InvalidRefreshTokenException;
 import ASSRONE.backend.service.LoginAttemptService;
+import ASSRONE.backend.service.RefreshTokenService;
 import ASSRONE.backend.service.UserInfoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,13 +29,16 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class UserControllerTest {
@@ -45,7 +50,7 @@ class UserControllerTest {
 
     private UserInfoService userInfoService;
     private AuthenticationManager authenticationManager;
-    private JwtService jwtService;
+    private RefreshTokenService refreshTokenService;
     private LoginAttemptService loginAttemptService;
     private MockMvc mockMvc;
 
@@ -53,9 +58,9 @@ class UserControllerTest {
     void setUp() {
         userInfoService = mock(UserInfoService.class);
         authenticationManager = mock(AuthenticationManager.class);
-        jwtService = mock(JwtService.class);
+        refreshTokenService = mock(RefreshTokenService.class);
         loginAttemptService = mock(LoginAttemptService.class);
-        UserController controller = new UserController(userInfoService, jwtService, authenticationManager, loginAttemptService);
+        UserController controller = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -120,8 +125,8 @@ class UserControllerTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
-        when(jwtService.generateToken("membre@assrone.ch")).thenReturn("access-token");
-        when(jwtService.generateRefreshToken("membre@assrone.ch")).thenReturn("refresh-token");
+        when(refreshTokenService.issueTokens("membre@assrone.ch")).thenReturn(
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch"));
 
         mockMvc.perform(post("/auth/generateToken")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -156,7 +161,7 @@ class UserControllerTest {
                         .content(LOGIN_INVALIDE))
                 .andExpect(status().isUnauthorized());
 
-        verifyNoInteractions(jwtService);
+        verifyNoInteractions(refreshTokenService);
     }
 
     @Test
@@ -164,8 +169,8 @@ class UserControllerTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
-        when(jwtService.generateToken(any())).thenReturn("access-token");
-        when(jwtService.generateRefreshToken(any())).thenReturn("refresh-token");
+        when(refreshTokenService.issueTokens(any())).thenReturn(
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch"));
 
         mockMvc.perform(post("/auth/generateToken")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -174,9 +179,9 @@ class UserControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        InOrder ordre = inOrder(loginAttemptService, jwtService);
+        InOrder ordre = inOrder(loginAttemptService, refreshTokenService);
         ordre.verify(loginAttemptService).resetFailedAttempts("membre@assrone.ch");
-        ordre.verify(jwtService).generateToken("membre@assrone.ch");
+        ordre.verify(refreshTokenService).issueTokens("membre@assrone.ch");
     }
 
     @Test
@@ -192,8 +197,15 @@ class UserControllerTest {
     }
 
     @Test
-    void inscriptionValideRetourneLeMessageDeConfirmation() throws Exception {
-        when(userInfoService.addUser(any(RegisterRequest.class))).thenReturn("User added successfully!");
+    void inscriptionValideRetourneLeContratTypeAvecLesChampsPublics() throws Exception {
+        when(userInfoService.addUser(any(RegisterRequest.class))).thenReturn(
+                RegisterResponse.builder()
+                        .id(1L)
+                        .username("jdupont")
+                        .email("jean.dupont@assrone.ch")
+                        .firstName("Jean")
+                        .lastName("Dupont")
+                        .build());
 
         mockMvc.perform(post("/auth/addNewUser")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -202,12 +214,23 @@ class UserControllerTest {
                                  "firstName":"Jean","lastName":"Dupont","password":"motdepasse123"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(content().string("User added successfully!"));
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.username").value("jdupont"))
+                .andExpect(jsonPath("$.email").value("jean.dupont@assrone.ch"))
+                .andExpect(jsonPath("$.firstName").value("Jean"))
+                .andExpect(jsonPath("$.lastName").value("Dupont"));
     }
 
     @Test
     void champsSensiblesDuJsonNAtteignentJamaisLeDtoTransmisAuService() throws Exception {
-        when(userInfoService.addUser(any(RegisterRequest.class))).thenReturn("User added successfully!");
+        when(userInfoService.addUser(any(RegisterRequest.class))).thenReturn(
+                RegisterResponse.builder()
+                        .id(1L)
+                        .username("attaquant")
+                        .email("attaquant@x.ch")
+                        .firstName("A")
+                        .lastName("B")
+                        .build());
         ArgumentCaptor<RegisterRequest> captor = ArgumentCaptor.forClass(RegisterRequest.class);
 
         mockMvc.perform(post("/auth/addNewUser")
@@ -251,7 +274,14 @@ class UserControllerTest {
 
     @Test
     void reponseNeContientAucunMotDePasseNiChampSensible() throws Exception {
-        when(userInfoService.addUser(any(RegisterRequest.class))).thenReturn("User added successfully!");
+        when(userInfoService.addUser(any(RegisterRequest.class))).thenReturn(
+                RegisterResponse.builder()
+                        .id(1L)
+                        .username("jdupont")
+                        .email("jean.dupont@assrone.ch")
+                        .firstName("Jean")
+                        .lastName("Dupont")
+                        .build());
 
         mockMvc.perform(post("/auth/addNewUser")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -260,6 +290,89 @@ class UserControllerTest {
                                  "firstName":"Jean","lastName":"Dupont","password":"motdepasse123"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(content().string("User added successfully!"));
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.role").doesNotExist())
+                .andExpect(jsonPath("$.isActive").doesNotExist());
+    }
+
+    @Test
+    void refreshValideRetourneUnNouveauCoupleDeTokens() throws Exception {
+        when(refreshTokenService.rotate("ancien-refresh-token")).thenReturn(
+                new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token", "ROLE_USER", "membre@assrone.ch"));
+
+        mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"ancien-refresh-token"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(content().json("""
+                        {"token":"nouveau-access-token","username":"membre@assrone.ch","role":"ROLE_USER","refreshToken":"nouveau-refresh-token"}
+                        """));
+    }
+
+    @Test
+    void refreshInvalideRetourne401SansDetailInterne() throws Exception {
+        when(refreshTokenService.rotate("token-invalide"))
+                .thenThrow(new InvalidRefreshTokenException("Refresh token invalide ou expiré."));
+
+        mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"token-invalide"}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json("""
+                        {"error":"Refresh token invalide ou expiré."}
+                        """));
+    }
+
+    @Test
+    void refreshSansCorpsRejeteAvec400() throws Exception {
+        mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void logoutAvecUnRefreshTokenLeRevoqueEtRetourne204() throws Exception {
+        mockMvc.perform(post("/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"un-refresh-token"}
+                                """))
+                .andExpect(status().isNoContent());
+
+        verify(refreshTokenService, times(1)).revoke(eq("un-refresh-token"));
+    }
+
+    @Test
+    void logoutSansCorpsRetourne204SansAppelerLeService() throws Exception {
+        mockMvc.perform(post("/auth/logout"))
+                .andExpect(status().isNoContent());
+
+        verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void doubleLogoutResteIdempotent() throws Exception {
+        mockMvc.perform(post("/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"un-refresh-token"}
+                                """))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"un-refresh-token"}
+                                """))
+                .andExpect(status().isNoContent());
+
+        verify(refreshTokenService, times(2)).revoke(eq("un-refresh-token"));
     }
 }

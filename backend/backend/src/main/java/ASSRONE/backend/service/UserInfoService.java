@@ -1,6 +1,7 @@
 package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.RegisterRequest;
+import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.dto.UserDto;
 import ASSRONE.backend.exception.UserAlreadyExistsException;
 import ASSRONE.backend.mapper.UserMapper;
@@ -51,7 +52,7 @@ public class UserInfoService implements UserDetailsService {
         return new UserInfoDetails(user, clock);
     }
 
-    public String addUser(RegisterRequest request) {
+    public RegisterResponse addUser(RegisterRequest request) {
         String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
 
         if (repository.findByEmail(normalizedEmail).isPresent()) {
@@ -68,8 +69,14 @@ public class UserInfoService implements UserDetailsService {
                 .isActive(true)
                 .build();
 
-        repository.save(user);
-        return "User added successfully!";
+        User saved = repository.save(user);
+        return RegisterResponse.builder()
+                .id(saved.getId())
+                .username(saved.getUsername())
+                .email(saved.getEmail())
+                .firstName(saved.getFirstName())
+                .lastName(saved.getLastName())
+                .build();
     }
 
     public List<UserDto> getAll() {

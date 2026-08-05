@@ -74,6 +74,10 @@ class FlywayEventsTypeCheckMigrationTest {
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("1")
+                // Stops right after V2, the migration under test. Without this, migrate()
+                // would keep applying every later migration on the classpath (V3+), each of
+                // which targets a table this test's minimal schema never creates.
+                .target("2")
                 .load();
     }
 

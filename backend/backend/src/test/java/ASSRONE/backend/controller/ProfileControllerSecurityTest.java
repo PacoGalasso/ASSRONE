@@ -72,6 +72,7 @@ class ProfileControllerSecurityTest {
         UserDetails userDetails = mock(UserDetails.class);
         when(userDetails.getUsername()).thenReturn(EMAIL);
         when(userDetails.isEnabled()).thenReturn(enabled);
+        when(userDetails.isAccountNonLocked()).thenReturn(true);
         doReturn(List.of(new SimpleGrantedAuthority("ROLE_USER"))).when(userDetails).getAuthorities();
         return userDetails;
     }
@@ -79,6 +80,7 @@ class ProfileControllerSecurityTest {
     @Test
     void jwtValideAvecCompteDesactiveRetourne401EtNAppellePasLeService() throws Exception {
         UserDetails disabledUser = userDetailsMock(false);
+        when(jwtService.extractTokenType(TOKEN)).thenReturn(JwtService.TOKEN_TYPE_ACCESS);
         when(jwtService.extractUsername(TOKEN)).thenReturn(EMAIL);
         when(userDetailsService.loadUserByUsername(EMAIL)).thenReturn(disabledUser);
         when(jwtService.validateToken(TOKEN, disabledUser)).thenReturn(true);
@@ -95,6 +97,7 @@ class ProfileControllerSecurityTest {
     @Test
     void jwtValideAvecCompteActifAccedeAuProfil() throws Exception {
         UserDetails activeUser = userDetailsMock(true);
+        when(jwtService.extractTokenType(TOKEN)).thenReturn(JwtService.TOKEN_TYPE_ACCESS);
         when(jwtService.extractUsername(TOKEN)).thenReturn(EMAIL);
         when(userDetailsService.loadUserByUsername(EMAIL)).thenReturn(activeUser);
         when(jwtService.validateToken(TOKEN, activeUser)).thenReturn(true);

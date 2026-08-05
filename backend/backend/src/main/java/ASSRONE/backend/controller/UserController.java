@@ -1,20 +1,20 @@
 package ASSRONE.backend.controller;
 
+import ASSRONE.backend.dto.RefreshTokenRequest;
 import ASSRONE.backend.dto.RegisterRequest;
+import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.exception.InvalidCredentialsException;
 import ASSRONE.backend.model.AuthRequest;
 import ASSRONE.backend.model.AuthResponse;
-import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.LoginAttemptService;
+import ASSRONE.backend.service.RefreshTokenService;
 import ASSRONE.backend.service.UserInfoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Locale;
@@ -24,7 +24,7 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class UserController {
     private final UserInfoService service;
-    private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
     private final AuthenticationManager authenticationManager;
     private final LoginAttemptService loginAttemptService;
 
@@ -34,43 +34,44 @@ public class UserController {
     }
 
     @PostMapping("/addNewUser")
-    public String addNewUser(@Valid @RequestBody RegisterRequest request) {
+    public RegisterResponse addNewUser(@Valid @RequestBody RegisterRequest request) {
         return service.addUser(request);
     }
 
+    // Historical path name — kept as-is to avoid breaking the existing
+    // frontend contract; this is the real login endpoint (email + password in,
+    // access + refresh token pair out).
     @PostMapping("/generateToken")
     public AuthResponse authenticateAndGetToken(@RequestBody AuthRequest authRequest) {
         String normalizedEmail = normalizeEmail(authRequest.getEmail());
 
-        Authentication authentication;
         try {
-            authentication = authenticationManager.authenticate(
+            authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(normalizedEmail, authRequest.getPassword())
             );
         } catch (AuthenticationException ex) {
             loginAttemptService.registerFailedAttempt(normalizedEmail);
             throw new InvalidCredentialsException("Email ou mot de passe incorrect.");
         }
-        if (authentication.isAuthenticated()) {
-            loginAttemptService.resetFailedAttempts(normalizedEmail);
 
-            String accessToken = jwtService.generateToken(normalizedEmail);
-            String refreshToken = jwtService.generateRefreshToken(normalizedEmail);
+        loginAttemptService.resetFailedAttempts(normalizedEmail);
+        RefreshTokenService.IssuedTokens tokens = refreshTokenService.issueTokens(normalizedEmail);
 
-            String role = authentication.getAuthorities().stream()
-                    .findFirst()
-                    .map(GrantedAuthority::getAuthority)
-                    .orElse("ROLE_USER");
+        return new AuthResponse(tokens.accessToken(), tokens.email(), tokens.role(), tokens.refreshToken());
+    }
 
-            return new AuthResponse(
-                    accessToken,
-                    normalizedEmail,
-                    role,
-                    refreshToken
-            );
-        } else {
-            throw new UsernameNotFoundException("Invalid user request!");
+    @PostMapping("/refresh")
+    public AuthResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        RefreshTokenService.IssuedTokens tokens = refreshTokenService.rotate(request.getRefreshToken());
+        return new AuthResponse(tokens.accessToken(), tokens.email(), tokens.role(), tokens.refreshToken());
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestBody(required = false) RefreshTokenRequest request) {
+        if (request != null) {
+            refreshTokenService.revoke(request.getRefreshToken());
         }
+        return ResponseEntity.noContent().build();
     }
 
     private static String normalizeEmail(String email) {

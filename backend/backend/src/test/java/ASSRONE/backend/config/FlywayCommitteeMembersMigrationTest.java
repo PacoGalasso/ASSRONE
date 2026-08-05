@@ -153,6 +153,10 @@ class FlywayCommitteeMembersMigrationTest {
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("3")
+                // Stops right after V4, the migration under test. Without this, migrate()
+                // would keep applying every later migration on the classpath (V5+), which
+                // targets a table (users) this test's minimal schema never creates.
+                .target("4")
                 .load();
     }
 

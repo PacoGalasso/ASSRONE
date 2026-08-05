@@ -25,6 +25,16 @@ public class JwtService {
     private static final long ACCESS_TOKEN_DURATION = 1000L * 60 * 30;        // 30 min
     private static final long REFRESH_TOKEN_DURATION = 1000L * 60 * 60 * 24 * 7; // 7 jours
 
+    // Distinguishes an access token from a refresh token at the claims level:
+    // the two are otherwise structurally identical JWTs signed with the same
+    // key, so without this a refresh token could be presented as a Bearer
+    // access token (and vice versa). Checked by JwtAuthFilter (only "access"
+    // authenticates a request) and by the refresh endpoint (only "refresh" is
+    // accepted there).
+    public static final String TOKEN_TYPE_CLAIM = "typ";
+    public static final String TOKEN_TYPE_ACCESS = "access";
+    public static final String TOKEN_TYPE_REFRESH = "refresh";
+
     private final UserDetailsService userDetailsService;
     private final SecretKey signingKey;
 
@@ -64,27 +74,34 @@ public class JwtService {
                 .findFirst()
                 .orElse("ROLE_USER");
 
-        Map<String, Object> claims = Map.of("role", role);
-        return generateToken(claims, email, ACCESS_TOKEN_DURATION);
+        Map<String, Object> claims = Map.of("role", role, TOKEN_TYPE_CLAIM, TOKEN_TYPE_ACCESS);
+        return generateToken(claims, email, ACCESS_TOKEN_DURATION, null);
     }
 
     // ===== REFRESH TOKEN =====
-    public String generateRefreshToken(String email) {
-        return generateToken(Map.of(), email, REFRESH_TOKEN_DURATION);
+    // jti is generated and persisted by RefreshTokenService (issuance/rotation/
+    // revocation bookkeeping lives there, not in this purely token-mechanics
+    // class), then embedded here as the JWT's standard "jti" claim so the
+    // presented token and its database row can be matched back to each other.
+    public String generateRefreshToken(String email, String jti) {
+        Map<String, Object> claims = Map.of(TOKEN_TYPE_CLAIM, TOKEN_TYPE_REFRESH);
+        return generateToken(claims, email, REFRESH_TOKEN_DURATION, jti);
     }
 
     // ===== TOKEN GENERATION =====
-    private String generateToken(Map<String, Object> extraClaims, String email, long duration) {
+    private String generateToken(Map<String, Object> extraClaims, String email, long duration, String jti) {
         Date issuedAt = new Date();
         Date expiration = new Date(issuedAt.getTime() + duration);
 
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .claims(extraClaims)
                 .subject(email)
                 .issuedAt(issuedAt)
-                .expiration(expiration)
-                .signWith(signingKey)
-                .compact();
+                .expiration(expiration);
+        if (jti != null) {
+            builder.id(jti);
+        }
+        return builder.signWith(signingKey).compact();
     }
 
     // ===== TOKEN EXTRACTION =====
@@ -94,6 +111,14 @@ public class JwtService {
 
     public Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
+    }
+
+    public String extractTokenType(String token) {
+        return extractClaim(token, claims -> claims.get(TOKEN_TYPE_CLAIM, String.class));
+    }
+
+    public String extractJti(String token) {
+        return extractClaim(token, Claims::getId);
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {

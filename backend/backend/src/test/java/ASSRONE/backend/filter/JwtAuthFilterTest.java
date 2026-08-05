@@ -66,9 +66,14 @@ class JwtAuthFilterTest {
     }
 
     private static UserDetails userDetailsMock(String email, boolean enabled) {
+        return userDetailsMock(email, enabled, true);
+    }
+
+    private static UserDetails userDetailsMock(String email, boolean enabled, boolean accountNonLocked) {
         UserDetails userDetails = mock(UserDetails.class);
         when(userDetails.getUsername()).thenReturn(email);
         when(userDetails.isEnabled()).thenReturn(enabled);
+        when(userDetails.isAccountNonLocked()).thenReturn(accountNonLocked);
         doReturn(List.of(new SimpleGrantedAuthority("ROLE_USER"))).when(userDetails).getAuthorities();
         return userDetails;
     }
@@ -159,6 +164,39 @@ class JwtAuthFilterTest {
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(userDetailsService, never()).loadUserByUsername(any());
+        verify(chain, times(1)).doFilter(request, response);
+    }
+
+    @Test
+    void unRefreshTokenPresenteCommeBearerNAuthentifiePasEtNAppellePasLeService() throws Exception {
+        String email = "membre@assrone.ch";
+        String refreshToken = jwtService.generateRefreshToken(email, "jti-de-test");
+
+        MockHttpServletRequest request = requestWithBearer(refreshToken);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilterInternal(request, response, chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(userDetailsService, never()).loadUserByUsername(any());
+        verify(chain, times(1)).doFilter(request, response);
+    }
+
+    @Test
+    void compteVerrouilleAvecJwtValideNEstJamaisAuthentifie() throws Exception {
+        String email = "verrouille@assrone.ch";
+        UserDetails user = userDetailsMock(email, true, false);
+        when(userDetailsService.loadUserByUsername(email)).thenReturn(user);
+        String token = jwtService.generateToken(email);
+
+        MockHttpServletRequest request = requestWithBearer(token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilterInternal(request, response, chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(chain, times(1)).doFilter(request, response);
     }
 }

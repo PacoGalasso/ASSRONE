@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
 
 @ExtendWith(MockitoExtension.class)
 class UserInfoServiceTest {
@@ -56,6 +57,7 @@ class UserInfoServiceTest {
     void normaliseEmailAvantLaRechercheEtLaSauvegarde() {
         when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
         when(encoder.encode("motdepasse123")).thenReturn("hash");
+        when(repository.save(any())).thenAnswer(returnsFirstArg());
 
         service.addUser(validRequest());
 
@@ -69,6 +71,7 @@ class UserInfoServiceTest {
     void creeUnCompteAvecLeRoleStandardEtActif() {
         when(repository.findByEmail(any())).thenReturn(Optional.empty());
         when(encoder.encode(any())).thenReturn("hash");
+        when(repository.save(any())).thenAnswer(returnsFirstArg());
 
         service.addUser(validRequest());
 
@@ -82,6 +85,7 @@ class UserInfoServiceTest {
     void encodeLeMotDePasseAvantSauvegarde() {
         when(repository.findByEmail(any())).thenReturn(Optional.empty());
         when(encoder.encode("motdepasse123")).thenReturn("motdepasse-hache");
+        when(repository.save(any())).thenAnswer(returnsFirstArg());
 
         service.addUser(validRequest());
 
@@ -104,6 +108,7 @@ class UserInfoServiceTest {
     void aucunChampControleParLeServeurNeProvientDeLaRequete() {
         when(repository.findByEmail(any())).thenReturn(Optional.empty());
         when(encoder.encode(any())).thenReturn("hash");
+        when(repository.save(any())).thenAnswer(returnsFirstArg());
 
         service.addUser(validRequest());
 

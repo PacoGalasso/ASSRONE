@@ -69,6 +69,8 @@ public class SecurityConfig {
                         .requestMatchers("/auth/welcome").permitAll()
                         .requestMatchers("/auth/addNewUser").permitAll()
                         .requestMatchers("/auth/generateToken").permitAll()
+                        .requestMatchers("/auth/refresh").permitAll()
+                        .requestMatchers("/auth/logout").permitAll()
                         .requestMatchers("/auth/user/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
                         .requestMatchers("/auth/admin/**").hasAuthority("ROLE_ADMIN")
                         .anyRequest().authenticated()
