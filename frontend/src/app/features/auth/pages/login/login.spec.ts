@@ -54,8 +54,7 @@ describe('Login', () => {
     authServiceMock.login.mockReturnValue(of({
       token: 'access-token',
       username: 'membre@assrone.ch',
-      role: 'ROLE_USER',
-      refreshToken: 'refresh-token'
+      role: 'ROLE_USER'
     }));
     const navigateSpy = vi.spyOn(router, 'navigate');
     component.loginForm.setValue({email: 'membre@assrone.ch', password: 'motdepasse123'});

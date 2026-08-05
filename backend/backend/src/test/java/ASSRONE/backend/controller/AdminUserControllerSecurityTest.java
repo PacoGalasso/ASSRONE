@@ -11,6 +11,7 @@ import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.model.UserRole;
 import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.security.ClientIpResolver;
+import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.AdminUserManagementService;
 import ASSRONE.backend.service.JwtService;
 import ASSRONE.backend.service.UserInfoService;
@@ -43,7 +44,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         RateLimitFilter.class,
         RateLimiterService.class,
         RateLimitConfig.class,
-        ClientIpResolver.class
+        ClientIpResolver.class,
+        RefreshCookieFactory.class
 })
 class AdminUserControllerSecurityTest {
 

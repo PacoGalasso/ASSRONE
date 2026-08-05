@@ -2,6 +2,7 @@ package ASSRONE.backend.config;
 
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,10 +36,18 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource) {
         http
+                // Still safe now that a cookie (the refresh token) is in play, not just the
+                // Authorization header: /auth/refresh and /auth/logout — the only two
+                // endpoints that read that cookie — are POST-only, and SameSite=Lax (see
+                // RefreshCookieFactory) already withholds the cookie from cross-site POST
+                // requests (Lax's top-level-navigation exemption only applies to GET). A
+                // forged cross-site request to either endpoint therefore arrives with no
+                // cookie at all and is rejected the same way a request with none would be —
+                // no separate CSRF token adds any protection SameSite doesn't already give.
                 .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
@@ -83,9 +92,14 @@ public class SecurityConfig {
     }
 
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.security.cors.allowed-origins:http://localhost:4200}") List<String> allowedOrigins) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:4200"));
+        // Never a wildcard here: the refresh-token cookie relies on
+        // allowCredentials(true), and browsers refuse allowCredentials
+        // together with "*" — only an explicit, known origin list works
+        // with credentialed (cookie-bearing) cross-origin requests.
+        config.setAllowedOrigins(allowedOrigins);
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

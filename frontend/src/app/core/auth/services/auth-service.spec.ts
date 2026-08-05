@@ -13,8 +13,7 @@ describe('AuthService', () => {
   const authResponse: AuthResponse = {
     token: 'access-token',
     username: 'membre@assrone.ch',
-    role: 'ROLE_USER',
-    refreshToken: 'refresh-token'
+    role: 'ROLE_USER'
   };
 
   beforeEach(() => {
@@ -33,7 +32,7 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should POST credentials and store both tokens on success', () => {
+    it('should POST credentials with credentials included and store the access token on success', () => {
       // #given
       const credentials = {email: 'membre@assrone.ch', password: 'motdepasse123'};
 
@@ -44,11 +43,25 @@ describe('AuthService', () => {
       const req = httpMock.expectOne('/auth/generateToken');
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toEqual(credentials);
+      expect(req.request.withCredentials).toBe(true);
       req.flush(authResponse);
 
       expect(service.getToken()).toBe('access-token');
-      expect(localStorage.getItem('refresh_token')).toBe('refresh-token');
       expect(service.isLoggedIn()).toBe(true);
+    });
+
+    it('should never write a refresh token to localStorage', () => {
+      // #given
+      const credentials = {email: 'membre@assrone.ch', password: 'motdepasse123'};
+
+      // #when
+      service.login(credentials).subscribe();
+
+      // #then
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
+
+      expect(localStorage.getItem('refresh_token')).toBeNull();
+      expect(Object.keys(localStorage)).not.toContain('refresh_token');
     });
   });
 
@@ -85,28 +98,12 @@ describe('AuthService', () => {
   });
 
   describe('refreshToken', () => {
-    it('should error without calling the backend when no refresh token is stored', async () => {
-      // #given no refresh token in storage
-
-      // #when
-      const errorReceived = new Promise<Error>((resolve) => {
-        service.refreshToken().subscribe({error: (err) => resolve(err)});
-      });
-
-      // #then
-      const err = await errorReceived;
-      expect(err.message).toBe('No refresh token available');
-      httpMock.expectNone('/auth/refresh');
-    });
-
-    it('should rotate tokens and update storage on success', () => {
+    it('should POST with credentials included and no token in the request body', () => {
       // #given
-      localStorage.setItem('refresh_token', 'old-refresh-token');
       const rotated: AuthResponse = {
         token: 'new-access-token',
         username: 'membre@assrone.ch',
-        role: 'ROLE_USER',
-        refreshToken: 'new-refresh-token'
+        role: 'ROLE_USER'
       };
 
       // #when
@@ -115,16 +112,32 @@ describe('AuthService', () => {
       // #then
       const req = httpMock.expectOne('/auth/refresh');
       expect(req.request.method).toBe('POST');
-      expect(req.request.body).toEqual({refreshToken: 'old-refresh-token'});
+      expect(req.request.body).toBeNull();
+      expect(req.request.withCredentials).toBe(true);
       req.flush(rotated);
 
       expect(service.getToken()).toBe('new-access-token');
-      expect(localStorage.getItem('refresh_token')).toBe('new-refresh-token');
+    });
+
+    it('should never write a refresh token to localStorage after rotation', () => {
+      // #given
+      const rotated: AuthResponse = {
+        token: 'new-access-token',
+        username: 'membre@assrone.ch',
+        role: 'ROLE_USER'
+      };
+
+      // #when
+      service.refreshToken().subscribe();
+
+      // #then
+      httpMock.expectOne('/auth/refresh').flush(rotated);
+
+      expect(localStorage.getItem('refresh_token')).toBeNull();
     });
 
     it('should propagate a backend refresh failure without altering stored auth state', () => {
       // #given
-      localStorage.setItem('refresh_token', 'expired-refresh-token');
       localStorage.setItem('auth_token', 'still-there');
       let receivedError: unknown;
 
@@ -141,10 +154,9 @@ describe('AuthService', () => {
   });
 
   describe('logout', () => {
-    it('should revoke the refresh token on the backend, clear storage and redirect home', () => {
+    it('should always call the backend with credentials included, clear storage and redirect home', () => {
       // #given
       localStorage.setItem('auth_token', 'access-token');
-      localStorage.setItem('refresh_token', 'refresh-token');
       localStorage.setItem('auth_user', JSON.stringify({username: 'membre@assrone.ch', role: 'ROLE_USER'}));
       const navigateSpy = vi.spyOn(router, 'navigate');
 
@@ -154,30 +166,29 @@ describe('AuthService', () => {
       // #then
       const req = httpMock.expectOne('/auth/logout');
       expect(req.request.method).toBe('POST');
-      expect(req.request.body).toEqual({refreshToken: 'refresh-token'});
+      expect(req.request.body).toBeNull();
+      expect(req.request.withCredentials).toBe(true);
       req.flush(null);
 
       expect(localStorage.getItem('auth_token')).toBeNull();
-      expect(localStorage.getItem('refresh_token')).toBeNull();
       expect(localStorage.getItem('auth_user')).toBeNull();
       expect(navigateSpy).toHaveBeenCalledWith(['/']);
     });
 
-    it('should not call the backend when no refresh token is stored, but still clear local state', () => {
-      // #given no refresh token in storage
-      localStorage.setItem('auth_token', 'access-token');
+    it('should call the backend even with no visible client-side auth state', () => {
+      // #given no token stored client-side (an HttpOnly refresh cookie could
+      // still exist server-side, invisible to this code either way)
 
       // #when
       service.logout();
 
       // #then
-      httpMock.expectNone('/auth/logout');
-      expect(localStorage.getItem('auth_token')).toBeNull();
+      httpMock.expectOne('/auth/logout').flush(null);
     });
 
     it('should still clear local state even if the backend call fails', () => {
       // #given
-      localStorage.setItem('refresh_token', 'refresh-token');
+      localStorage.setItem('auth_token', 'access-token');
 
       // #when
       service.logout();
@@ -186,7 +197,7 @@ describe('AuthService', () => {
       const req = httpMock.expectOne('/auth/logout');
       req.flush({error: 'boom'}, {status: 500, statusText: 'Internal Server Error'});
 
-      expect(localStorage.getItem('refresh_token')).toBeNull();
+      expect(localStorage.getItem('auth_token')).toBeNull();
       expect(service.isLoggedIn()).toBe(false);
     });
   });

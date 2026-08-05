@@ -9,6 +9,7 @@ import ASSRONE.backend.dto.MembershipApplicationDto;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
 import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.security.ClientIpResolver;
+import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.ContactEmailService;
 import ASSRONE.backend.service.EventService;
 import ASSRONE.backend.service.LoginAttemptService;
@@ -24,6 +25,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -60,7 +62,8 @@ class RateLimitFilterIntegrationTest {
         UserInfoService userInfoService = mock(UserInfoService.class);
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
         when(refreshTokenService.issueTokens(any())).thenReturn(
-                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch"));
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
+                        Duration.ofDays(7)));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         contactEmailService = mock(ContactEmailService.class);
         membershipApplicationService = mock(MembershipApplicationService.class);
@@ -70,7 +73,8 @@ class RateLimitFilterIntegrationTest {
                 TimeMeter.SYSTEM_NANOTIME, com.github.benmanes.caffeine.cache.Ticker.systemTicker());
         RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, new ClientIpResolver(""));
 
-        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService);
+        RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory("refresh_token", false, "Lax", "/auth");
+        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory);
         ContactController contactController = new ContactController(contactEmailService);
         MembershipApplicationController membershipApplicationController =
                 new MembershipApplicationController(membershipApplicationService);
@@ -79,7 +83,7 @@ class RateLimitFilterIntegrationTest {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(userController, contactController, membershipApplicationController, eventController)
                 .addFilters(rateLimitFilter)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(refreshCookieFactory))
                 .build();
     }
 
@@ -263,14 +267,16 @@ class RateLimitFilterIntegrationTest {
         UserInfoService userInfoService = mock(UserInfoService.class);
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
         when(refreshTokenService.issueTokens(any())).thenReturn(
-                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch"));
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
+                        Duration.ofDays(7)));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
-        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService);
+        RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory("refresh_token", false, "Lax", "/auth");
+        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory);
 
         return MockMvcBuilders
                 .standaloneSetup(userController)
                 .addFilters(rateLimitFilter)
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(refreshCookieFactory))
                 .build();
     }
 

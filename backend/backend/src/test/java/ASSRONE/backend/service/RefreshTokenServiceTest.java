@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -96,6 +97,7 @@ class RefreshTokenServiceTest {
         assertThat(tokens.refreshToken()).isEqualTo("refresh-token");
         assertThat(tokens.role()).isEqualTo("ROLE_USER");
         assertThat(tokens.email()).isEqualTo(EMAIL);
+        assertThat(tokens.refreshTokenMaxAge()).isEqualTo(Duration.ofSeconds(3600));
 
         var captor = org.mockito.ArgumentCaptor.forClass(RefreshToken.class);
         verify(refreshTokenRepository).save(captor.capture());
@@ -138,6 +140,7 @@ class RefreshTokenServiceTest {
 
         assertThat(tokens.accessToken()).isEqualTo("nouveau-access-token");
         assertThat(tokens.refreshToken()).isEqualTo("nouveau-refresh-token");
+        assertThat(tokens.refreshTokenMaxAge()).isEqualTo(Duration.ofSeconds(3600));
         verify(refreshTokenRepository).revokeByJti(eq("jti-1"), any());
         verify(refreshTokenRepository).save(any(RefreshToken.class));
     }

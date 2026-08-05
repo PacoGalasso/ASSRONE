@@ -1,5 +1,6 @@
 package ASSRONE.backend.exception;
 
+import ASSRONE.backend.security.RefreshCookieFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,7 +11,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class GlobalExceptionHandlerTest {
 
-    private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+    private final GlobalExceptionHandler handler =
+            new GlobalExceptionHandler(new RefreshCookieFactory("refresh_token", false, "Lax", "/auth"));
 
     @Test
     void resourceNotFoundRetourne404AvecUniquementLaCleError() {

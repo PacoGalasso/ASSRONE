@@ -10,6 +10,7 @@ import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.security.ClientIpResolver;
+import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.EventService;
 import ASSRONE.backend.service.JwtService;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         RateLimitFilter.class,
         RateLimiterService.class,
         RateLimitConfig.class,
-        ClientIpResolver.class
+        ClientIpResolver.class,
+        RefreshCookieFactory.class
 })
 class EventControllerSecurityTest {
 

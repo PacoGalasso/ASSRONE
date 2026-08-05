@@ -71,7 +71,6 @@ describe('JwtInterceptor', () => {
   it('should refresh once and retry the failed request on a single 401', () => {
     // #given
     localStorage.setItem('auth_token', 'expired-token');
-    localStorage.setItem('refresh_token', 'refresh-token');
     injectHttp();
 
     // #when
@@ -82,11 +81,12 @@ describe('JwtInterceptor', () => {
     firstAttempt.flush({error: 'expired'}, {status: 401, statusText: 'Unauthorized'});
 
     const refreshReq = httpMock.expectOne('/auth/refresh');
+    expect(refreshReq.request.withCredentials).toBe(true);
+    expect(refreshReq.request.body).toBeNull();
     refreshReq.flush({
       token: 'new-access-token',
       username: 'membre@assrone.ch',
-      role: 'ROLE_USER',
-      refreshToken: 'new-refresh-token'
+      role: 'ROLE_USER'
     });
 
     const retry = httpMock.expectOne('/api/documents');
@@ -97,7 +97,6 @@ describe('JwtInterceptor', () => {
   it('should send exactly one refresh call and resume all queued requests when multiple 401s arrive concurrently', () => {
     // #given
     localStorage.setItem('auth_token', 'expired-token');
-    localStorage.setItem('refresh_token', 'refresh-token');
     injectHttp();
 
     // #when
@@ -113,8 +112,7 @@ describe('JwtInterceptor', () => {
     httpMock.expectOne('/auth/refresh').flush({
       token: 'new-access-token',
       username: 'membre@assrone.ch',
-      role: 'ROLE_USER',
-      refreshToken: 'new-refresh-token'
+      role: 'ROLE_USER'
     });
 
     const retriedDocuments = httpMock.expectOne('/api/documents');
@@ -128,7 +126,6 @@ describe('JwtInterceptor', () => {
   it('should log out and propagate the error, without looping, when the refresh call itself fails', () => {
     // #given
     localStorage.setItem('auth_token', 'expired-token');
-    localStorage.setItem('refresh_token', 'expired-refresh-token');
     injectHttp();
     const logoutSpy = vi.spyOn(authService, 'logout').mockImplementation(() => {});
     let receivedError: unknown;
@@ -150,7 +147,6 @@ describe('JwtInterceptor', () => {
   it('should also error out queued requests, instead of hanging, when the shared refresh fails', () => {
     // #given
     localStorage.setItem('auth_token', 'expired-token');
-    localStorage.setItem('refresh_token', 'expired-refresh-token');
     injectHttp();
     vi.spyOn(authService, 'logout').mockImplementation(() => {});
     let firstError: unknown;

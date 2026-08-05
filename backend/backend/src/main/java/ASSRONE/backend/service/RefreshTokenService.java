@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -40,7 +41,8 @@ public class RefreshTokenService {
     private final JwtService jwtService;
     private final Clock clock;
 
-    public record IssuedTokens(String accessToken, String refreshToken, String role, String email) {
+    public record IssuedTokens(String accessToken, String refreshToken, String role, String email,
+                                Duration refreshTokenMaxAge) {
     }
 
     @Transactional
@@ -146,17 +148,23 @@ public class RefreshTokenService {
         String accessToken = jwtService.generateToken(user.getEmail());
         String jti = UUID.randomUUID().toString();
         String refreshToken = jwtService.generateRefreshToken(user.getEmail(), jti);
+        LocalDateTime expiresAt = toLocalDateTime(jwtService.extractExpiration(refreshToken));
 
         RefreshToken entity = RefreshToken.builder()
                 .userId(user.getId())
                 .jti(jti)
                 .tokenHash(hash(refreshToken))
-                .expiresAt(toLocalDateTime(jwtService.extractExpiration(refreshToken)))
+                .expiresAt(expiresAt)
                 .build();
         refreshTokenRepository.save(entity);
 
         String role = "ROLE_" + user.getRole().toUpperCase(Locale.ROOT);
-        return new IssuedTokens(accessToken, refreshToken, role, user.getEmail());
+        // Same clock the expiresAt check in rotate() uses, so the cookie's
+        // Max-Age (a browser-side convenience) and the DB-enforced expiration
+        // (the actual security boundary) can never disagree by more than
+        // whatever tiny amount of time elapses between these two lines.
+        Duration maxAge = Duration.between(LocalDateTime.now(clock), expiresAt);
+        return new IssuedTokens(accessToken, refreshToken, role, user.getEmail(), maxAge);
     }
 
     private static LocalDateTime toLocalDateTime(java.util.Date date) {
