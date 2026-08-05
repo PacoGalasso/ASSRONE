@@ -1,7 +1,7 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.event.MembershipApplicationAcceptedEvent;
 import ASSRONE.backend.event.MembershipApplicationSubmittedEvent;
-import ASSRONE.backend.model.MembershipApplication;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
@@ -47,16 +47,16 @@ public class MembershipEmailService {
         mailSender.send(toApplicant);
     }
 
-    public void sendAccountCreated(MembershipApplication application, String rawPassword) {
+    public void sendAccountCreated(MembershipApplicationAcceptedEvent event) {
         SimpleMailMessage email = new SimpleMailMessage();
         email.setFrom(fromAddress);
-        email.setTo(application.getEmail());
+        email.setTo(event.email());
         email.setSubject("Bienvenue à ASSRONE — vos identifiants de connexion");
         email.setText(
-                "Bonjour " + application.getFullName() + ",\n\n"
+                "Bonjour " + event.fullName() + ",\n\n"
                         + "Votre demande d'adhésion à ASSRONE a été acceptée. Voici vos identifiants de connexion :\n\n"
-                        + "Email : " + application.getEmail() + "\n"
-                        + "Mot de passe temporaire : " + rawPassword + "\n\n"
+                        + "Email : " + event.email() + "\n"
+                        + "Mot de passe temporaire : " + event.rawPassword() + "\n\n"
                         + "Vous pourrez modifier ce mot de passe depuis votre profil après connexion.\n\n"
                         + "Nous avons bien pris en compte votre paiement de la cotisation annuelle et vous en remercions.\n\n"
                         + "Bienvenue parmi nous,\nL'équipe ASSRONE"

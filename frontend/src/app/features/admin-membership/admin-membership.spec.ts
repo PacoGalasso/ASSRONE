@@ -4,15 +4,15 @@ import {AdminMembership} from './admin-membership';
 import {AdminUserService} from '../../core/auth/services/admin-user-service';
 import {MembershipApplicationService} from '../../core/auth/services/membership-application-service';
 import {AuthService} from '../../core/auth/services/auth-service';
-import {UserProfile} from '../../core/auth/models/profile.model';
+import {AdminUserDto} from '../../core/auth/models/profile.model';
 
-const ADMIN_USER: UserProfile = {
+const ADMIN_USER: AdminUserDto = {
   id: 1, email: 'admin@assrone.ch', username: 'admin', firstName: 'Admin', lastName: 'Un',
-  role: 'ADMIN', createdAt: '2026-01-01T00:00:00',
+  role: 'ADMIN', createdAt: '2026-01-01T00:00:00', updatedAt: '2026-01-01T00:00:00', isActive: true,
 };
-const OTHER_USER: UserProfile = {
+const OTHER_USER: AdminUserDto = {
   id: 2, email: 'membre@assrone.ch', username: 'membre', firstName: 'Membre', lastName: 'Deux',
-  role: 'USER', createdAt: '2026-01-02T00:00:00',
+  role: 'USER', createdAt: '2026-01-02T00:00:00', updatedAt: '2026-01-02T00:00:00', isActive: true,
 };
 
 describe('AdminMembership', () => {

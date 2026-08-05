@@ -78,6 +78,30 @@ class UserControllerTest {
     }
 
     @Test
+    void motDePasseAbsentRejeteAvec400EtNAtteintJamaisLAuthenticationManager() throws Exception {
+        mockMvc.perform(post("/auth/generateToken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"membre@assrone.ch"}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(authenticationManager);
+    }
+
+    @Test
+    void emailAbsentRejeteAvec400EtNAtteintJamaisLAuthenticationManager() throws Exception {
+        mockMvc.perform(post("/auth/generateToken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"password":"bon-mot-de-passe"}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(authenticationManager);
+    }
+
+    @Test
     void compteDesactiveRetourneExactementLeMemeStatutEtLeMemeMessage() throws Exception {
         when(authenticationManager.authenticate(any())).thenThrow(new DisabledException("Disabled"));
 

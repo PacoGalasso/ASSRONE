@@ -2,10 +2,12 @@ package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.CreateMembershipApplicationRequest;
 import ASSRONE.backend.dto.MembershipApplicationDto;
+import ASSRONE.backend.event.MembershipApplicationAcceptedEvent;
 import ASSRONE.backend.event.MembershipApplicationSubmittedEvent;
 import ASSRONE.backend.exception.MembershipApplicationAlreadyPendingException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.exception.UserAlreadyExistsException;
+import ASSRONE.backend.exception.UsernameAlreadyExistsException;
 import ASSRONE.backend.mapper.MembershipApplicationMapper;
 import ASSRONE.backend.model.ApplicationStatus;
 import ASSRONE.backend.model.MembershipApplication;
@@ -44,9 +46,6 @@ class MembershipApplicationServiceTest {
     private MembershipApplicationMapper mapper;
 
     @Mock
-    private MembershipEmailService membershipEmailService;
-
-    @Mock
     private UserInfoRepository userInfoRepository;
 
     @Mock
@@ -57,7 +56,7 @@ class MembershipApplicationServiceTest {
 
     private MembershipApplicationService service() {
         return new MembershipApplicationService(
-                repository, mapper, membershipEmailService, userInfoRepository, passwordEncoder, eventPublisher);
+                repository, mapper, userInfoRepository, passwordEncoder, eventPublisher);
     }
 
     private static CreateMembershipApplicationRequest requeteValide(String email) {
@@ -75,6 +74,17 @@ class MembershipApplicationServiceTest {
                 .email(email)
                 .membershipType(MembershipType.INDIVIDUEL)
                 .charterAccepted(true)
+                .build();
+    }
+
+    private static MembershipApplication candidaturePending(Long id, String email) {
+        return MembershipApplication.builder()
+                .id(id)
+                .fullName("Jean Dupont")
+                .email(email)
+                .membershipType(MembershipType.INDIVIDUEL)
+                .charterAccepted(true)
+                .status(ApplicationStatus.PENDING)
                 .build();
     }
 
@@ -114,7 +124,6 @@ class MembershipApplicationServiceTest {
         verify(eventPublisher, times(1)).publishEvent(captor.capture());
         assertThat(captor.getValue().email()).isEqualTo("jean.dupont@assrone.ch");
         assertThat(captor.getValue().fullName()).isEqualTo("Jean Dupont");
-        verifyNoInteractions(membershipEmailService);
     }
 
     @Test
@@ -142,7 +151,6 @@ class MembershipApplicationServiceTest {
 
         verifyNoInteractions(repository);
         verifyNoInteractions(eventPublisher);
-        verifyNoInteractions(membershipEmailService);
     }
 
     @Test
@@ -156,7 +164,6 @@ class MembershipApplicationServiceTest {
 
         verify(repository, never()).saveAndFlush(any());
         verifyNoInteractions(eventPublisher);
-        verifyNoInteractions(membershipEmailService);
     }
 
     @Test
@@ -202,7 +209,6 @@ class MembershipApplicationServiceTest {
                 .hasMessage("Une demande d'adhésion est déjà en cours de traitement pour cet email.");
 
         verifyNoInteractions(eventPublisher);
-        verifyNoInteractions(membershipEmailService);
     }
 
     @Test
@@ -221,5 +227,156 @@ class MembershipApplicationServiceTest {
                 .isNotInstanceOf(MembershipApplicationAlreadyPendingException.class);
 
         verifyNoInteractions(eventPublisher);
+    }
+
+    // ===== accept =====
+
+    @Test
+    void acceptAvecSuccesCreeUnCompteEtPublieUnEvenementDeBienvenue() {
+        MembershipApplication application = candidaturePending(1L, "jean.dupont@assrone.ch");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(userInfoRepository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(userInfoRepository.existsByUsername("jean.dupont")).thenReturn(false);
+        when(passwordEncoder.encode(any())).thenReturn("mot-de-passe-hache");
+        when(repository.save(application)).thenReturn(application);
+        when(mapper.toDto(application)).thenReturn(
+                MembershipApplicationDto.builder().email("jean.dupont@assrone.ch").status(ApplicationStatus.APPROVED).build());
+
+        MembershipApplicationDto result = service().accept(1L);
+
+        assertThat(result.getEmail()).isEqualTo("jean.dupont@assrone.ch");
+        assertThat(application.getStatus()).isEqualTo(ApplicationStatus.APPROVED);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userInfoRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getEmail()).isEqualTo("jean.dupont@assrone.ch");
+        assertThat(userCaptor.getValue().getUsername()).isEqualTo("jean.dupont");
+        assertThat(userCaptor.getValue().getRole()).isEqualTo("USER");
+        assertThat(userCaptor.getValue().getPassword()).isEqualTo("mot-de-passe-hache");
+
+        ArgumentCaptor<MembershipApplicationAcceptedEvent> eventCaptor =
+                ArgumentCaptor.forClass(MembershipApplicationAcceptedEvent.class);
+        verify(eventPublisher, times(1)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().applicationId()).isEqualTo(1L);
+        assertThat(eventCaptor.getValue().fullName()).isEqualTo("Jean Dupont");
+        assertThat(eventCaptor.getValue().email()).isEqualTo("jean.dupont@assrone.ch");
+        assertThat(eventCaptor.getValue().rawPassword()).isNotBlank();
+    }
+
+    @Test
+    void acceptAvecUnCompteDejaExistantEstRefuseSansCreerNiPublier() {
+        MembershipApplication application = candidaturePending(1L, "jean.dupont@assrone.ch");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(userInfoRepository.findByEmail("jean.dupont@assrone.ch")).thenReturn(
+                Optional.of(User.builder().email("jean.dupont@assrone.ch").username("jdupont").password("x").build()));
+
+        assertThatThrownBy(() -> service().accept(1L))
+                .isInstanceOf(UserAlreadyExistsException.class);
+
+        verify(userInfoRepository, never()).save(any());
+        verify(repository, never()).save(any(MembershipApplication.class));
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void acceptAvecCollisionConcurrentielleSurLEmailEstTraduiteEnExceptionMetier() {
+        // Le pré-contrôle (findByEmail) passe, mais l'écriture elle-même est en
+        // conflit : simule une deuxième candidature pour le même email acceptée
+        // entre le pré-contrôle et la sauvegarde de celle-ci.
+        MembershipApplication application = candidaturePending(1L, "jean.dupont@assrone.ch");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(userInfoRepository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(userInfoRepository.existsByUsername("jean.dupont")).thenReturn(false);
+        when(passwordEncoder.encode(any())).thenReturn("mot-de-passe-hache");
+        when(userInfoRepository.save(any())).thenThrow(new DataIntegrityViolationException("collision"));
+
+        assertThatThrownBy(() -> service().accept(1L))
+                .isInstanceOf(UserAlreadyExistsException.class);
+
+        verify(repository, never()).save(any(MembershipApplication.class));
+        verifyNoInteractions(eventPublisher);
+    }
+
+    // ===== accept : collisions de username généré depuis la partie locale de l'email =====
+
+    @Test
+    void acceptGenereUnUsernameDistinctQuandLaPartieLocaleDeLEmailEstDejaPrise() {
+        // Un compte "pacogalasso" (pacogalasso@gmail.com) existe déjà ; la
+        // candidature en cours porte un email DIFFÉRENT mais partageant la même
+        // partie locale. Les deux comptes doivent rester distincts et autorisés.
+        MembershipApplication application = candidaturePending(1L, "pacogalasso@icloud.com");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(userInfoRepository.findByEmail("pacogalasso@icloud.com")).thenReturn(Optional.empty());
+        when(userInfoRepository.existsByUsername("pacogalasso")).thenReturn(true);
+        when(userInfoRepository.existsByUsername("pacogalasso2")).thenReturn(false);
+        when(passwordEncoder.encode(any())).thenReturn("mot-de-passe-hache");
+        when(repository.save(application)).thenReturn(application);
+        when(mapper.toDto(application)).thenReturn(
+                MembershipApplicationDto.builder().email("pacogalasso@icloud.com").status(ApplicationStatus.APPROVED).build());
+
+        service().accept(1L);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userInfoRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getEmail()).isEqualTo("pacogalasso@icloud.com");
+        assertThat(userCaptor.getValue().getUsername()).isEqualTo("pacogalasso2");
+        assertThat(application.getStatus()).isEqualTo(ApplicationStatus.APPROVED);
+        verify(eventPublisher, times(1)).publishEvent(any(MembershipApplicationAcceptedEvent.class));
+    }
+
+    @Test
+    void acceptGenereLeTroisiemeUsernameDisponibleApresPlusieursCollisionsSuccessives() {
+        MembershipApplication application = candidaturePending(1L, "pacogalasso@outlook.com");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(userInfoRepository.findByEmail("pacogalasso@outlook.com")).thenReturn(Optional.empty());
+        when(userInfoRepository.existsByUsername("pacogalasso")).thenReturn(true);
+        when(userInfoRepository.existsByUsername("pacogalasso2")).thenReturn(true);
+        when(userInfoRepository.existsByUsername("pacogalasso3")).thenReturn(false);
+        when(passwordEncoder.encode(any())).thenReturn("mot-de-passe-hache");
+        when(repository.save(application)).thenReturn(application);
+        when(mapper.toDto(application)).thenReturn(MembershipApplicationDto.builder().build());
+
+        service().accept(1L);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userInfoRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getUsername()).isEqualTo("pacogalasso3");
+    }
+
+    @Test
+    void acceptAvecCollisionConcurrentielleSurLeUsernameLorsDeLInsertionLeveUsernameAlreadyExistsSansApprouverNiPublier() {
+        // Le pré-contrôle (existsByUsername) indique le candidat libre, mais une
+        // autre requête l'a pris entre ce contrôle et l'écriture elle-même.
+        MembershipApplication application = candidaturePending(1L, "pacogalasso@icloud.com");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(userInfoRepository.findByEmail("pacogalasso@icloud.com")).thenReturn(Optional.empty());
+        when(userInfoRepository.existsByUsername("pacogalasso")).thenReturn(false);
+        when(passwordEncoder.encode(any())).thenReturn("mot-de-passe-hache");
+        ConstraintViolationException cause = new ConstraintViolationException(
+                "duplicate key value violates unique constraint", null, "uk_users_username");
+        when(userInfoRepository.save(any())).thenThrow(new DataIntegrityViolationException("collision", cause));
+
+        assertThatThrownBy(() -> service().accept(1L))
+                .isInstanceOf(UsernameAlreadyExistsException.class);
+
+        assertThat(application.getStatus()).isEqualTo(ApplicationStatus.PENDING);
+        verify(repository, never()).save(any(MembershipApplication.class));
+        verifyNoInteractions(eventPublisher);
+    }
+
+    // ===== reject =====
+
+    @Test
+    void rejectAvecSuccesMarqueLaCandidatureRejetee() {
+        MembershipApplication application = candidaturePending(1L, "jean.dupont@assrone.ch");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(repository.save(application)).thenReturn(application);
+        when(mapper.toDto(application)).thenReturn(
+                MembershipApplicationDto.builder().email("jean.dupont@assrone.ch").status(ApplicationStatus.REJECTED).build());
+
+        MembershipApplicationDto result = service().reject(1L);
+
+        assertThat(application.getStatus()).isEqualTo(ApplicationStatus.REJECTED);
+        assertThat(result.getStatus()).isEqualTo(ApplicationStatus.REJECTED);
     }
 }

@@ -2,9 +2,11 @@ package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.exception.UserAlreadyExistsException;
+import ASSRONE.backend.exception.UsernameAlreadyExistsException;
 import ASSRONE.backend.mapper.UserMapper;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.UserInfoRepository;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Clock;
@@ -102,6 +105,30 @@ class UserInfoServiceTest {
                 .isInstanceOf(UserAlreadyExistsException.class);
 
         verify(repository, Mockito.never()).save(any());
+    }
+
+    @Test
+    void nomDUtilisateurDejaUtiliseLeveUsernameAlreadyExistsException() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("hash");
+        ConstraintViolationException cause = new ConstraintViolationException(
+                "duplicate key value violates unique constraint", null, "uk_users_username");
+        when(repository.save(any())).thenThrow(new DataIntegrityViolationException("collision", cause));
+
+        assertThatThrownBy(() -> service.addUser(validRequest()))
+                .isInstanceOf(UsernameAlreadyExistsException.class)
+                .hasMessage("Le nom d'utilisateur jdupont est déjà utilisé.");
+    }
+
+    @Test
+    void collisionDIntegriteSansRapportAvecLeUsernameResteUneCollisionDEmail() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("hash");
+        when(repository.save(any())).thenThrow(new DataIntegrityViolationException("collision sans cause connue"));
+
+        assertThatThrownBy(() -> service.addUser(validRequest()))
+                .isInstanceOf(UserAlreadyExistsException.class)
+                .isNotInstanceOf(UsernameAlreadyExistsException.class);
     }
 
     @Test
