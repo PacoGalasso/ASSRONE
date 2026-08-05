@@ -16,7 +16,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.UUID;
@@ -148,7 +147,13 @@ public class RefreshTokenService {
         String accessToken = jwtService.generateToken(user.getEmail());
         String jti = UUID.randomUUID().toString();
         String refreshToken = jwtService.generateRefreshToken(user.getEmail(), jti);
-        LocalDateTime expiresAt = toLocalDateTime(jwtService.extractExpiration(refreshToken));
+        Instant expirationInstant = jwtService.extractExpiration(refreshToken).toInstant();
+        // Derived from the injected clock's own zone, never ZoneId.systemDefault():
+        // that keeps this value directly comparable to every other
+        // LocalDateTime.now(clock) call in this class (the expiresAt check in
+        // rotate(), lockedUntil, ...), regardless of what zone the JVM happens
+        // to be running in.
+        LocalDateTime expiresAt = LocalDateTime.ofInstant(expirationInstant, clock.getZone());
 
         RefreshToken entity = RefreshToken.builder()
                 .userId(user.getId())
@@ -159,16 +164,14 @@ public class RefreshTokenService {
         refreshTokenRepository.save(entity);
 
         String role = "ROLE_" + user.getRole().toUpperCase(Locale.ROOT);
-        // Same clock the expiresAt check in rotate() uses, so the cookie's
-        // Max-Age (a browser-side convenience) and the DB-enforced expiration
-        // (the actual security boundary) can never disagree by more than
-        // whatever tiny amount of time elapses between these two lines.
-        Duration maxAge = Duration.between(LocalDateTime.now(clock), expiresAt);
+        // Computed straight from Instants, never by subtracting two
+        // LocalDateTimes: a LocalDateTime carries no zone/offset information,
+        // so Duration.between two of them is only correct if both happened to
+        // be derived from the exact same zone. Instant arithmetic sidesteps
+        // that trap entirely and stays correct across DST transitions and
+        // regardless of the JVM's default time zone.
+        Duration maxAge = Duration.between(clock.instant(), expirationInstant);
         return new IssuedTokens(accessToken, refreshToken, role, user.getEmail(), maxAge);
-    }
-
-    private static LocalDateTime toLocalDateTime(java.util.Date date) {
-        return LocalDateTime.ofInstant(Instant.ofEpochMilli(date.getTime()), ZoneId.systemDefault());
     }
 
     private static String hash(String rawToken) {
