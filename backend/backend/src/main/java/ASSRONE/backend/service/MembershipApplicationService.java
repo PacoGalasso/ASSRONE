@@ -2,6 +2,7 @@ package ASSRONE.backend.service;
 
 import ASSRONE.backend.dto.CreateMembershipApplicationRequest;
 import ASSRONE.backend.dto.MembershipApplicationDto;
+import ASSRONE.backend.event.MembershipApplicationAcceptedEvent;
 import ASSRONE.backend.event.MembershipApplicationSubmittedEvent;
 import ASSRONE.backend.exception.MembershipApplicationAlreadyPendingException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
@@ -35,7 +36,6 @@ public class MembershipApplicationService {
 
     private final MembershipApplicationRepository repository;
     private final MembershipApplicationMapper mapper;
-    private final MembershipEmailService membershipEmailService;
     private final UserInfoRepository userInfoRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
@@ -116,16 +116,27 @@ public class MembershipApplicationService {
                 .lastName(lastName)
                 .role("USER")
                 .build();
-        userInfoRepository.save(user);
+        try {
+            userInfoRepository.save(user);
+        } catch (DataIntegrityViolationException ex) {
+            // The pre-check above (findByEmail) can't see a concurrent accept()
+            // for the same email landing between that read and this write; the
+            // unique constraint on users.email is the real guarantee, and this
+            // translates its violation into the same clean 409 the pre-check
+            // already produces for the non-concurrent case.
+            throw new UserAlreadyExistsException("Un compte existe déjà avec l'email " + application.getEmail());
+        }
 
         application.setStatus(ApplicationStatus.APPROVED);
         MembershipApplication saved = repository.save(application);
 
-        membershipEmailService.sendAccountCreated(application, rawPassword);
+        eventPublisher.publishEvent(new MembershipApplicationAcceptedEvent(
+                saved.getId(), saved.getFullName(), saved.getEmail(), rawPassword));
 
         return mapper.toDto(saved);
     }
 
+    @Transactional
     public MembershipApplicationDto reject(Long id) {
         MembershipApplication application = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Demande introuvable : " + id));

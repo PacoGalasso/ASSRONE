@@ -70,7 +70,9 @@ class Events implements OnInit {
       },
       error: (err) => {
         this.registrationError.set(
-          err.status === 409 ? 'Cet événement est complet.' : 'Une erreur est survenue. Réessayez.'
+          err.status === 409 && err.error?.error
+            ? err.error.error
+            : 'Une erreur est survenue. Réessayez.'
         );
         this.registering.set(false);
       },

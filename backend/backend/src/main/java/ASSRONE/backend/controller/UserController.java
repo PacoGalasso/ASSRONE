@@ -42,7 +42,7 @@ public class UserController {
     // frontend contract; this is the real login endpoint (email + password in,
     // access + refresh token pair out).
     @PostMapping("/generateToken")
-    public AuthResponse authenticateAndGetToken(@RequestBody AuthRequest authRequest) {
+    public AuthResponse authenticateAndGetToken(@Valid @RequestBody AuthRequest authRequest) {
         String normalizedEmail = normalizeEmail(authRequest.getEmail());
 
         try {

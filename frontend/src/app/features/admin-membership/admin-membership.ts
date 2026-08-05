@@ -5,7 +5,7 @@ import {MembershipApplicationService} from '../../core/auth/services/membership-
 import {AdminUserService} from '../../core/auth/services/admin-user-service';
 import {AuthService} from '../../core/auth/services/auth-service';
 import {MembershipApplicationDto} from '../../core/auth/models/membership-application.model';
-import {Role, UserProfile} from '../../core/auth/models/profile.model';
+import {AdminUserDto, Role} from '../../core/auth/models/profile.model';
 
 @Component({
   selector: 'app-admin-membership',
@@ -21,7 +21,7 @@ export class AdminMembership implements OnInit {
   readonly roles: Role[] = ['USER', 'ADMIN'];
 
   applications = signal<MembershipApplicationDto[]>([]);
-  users = signal<UserProfile[]>([]);
+  users = signal<AdminUserDto[]>([]);
   loadingApplications = signal(true);
   loadingUsers = signal(true);
   processingId = signal<number | null>(null);
@@ -94,12 +94,12 @@ export class AdminMembership implements OnInit {
     });
   }
 
-  isSelf(user: UserProfile): boolean {
+  isSelf(user: AdminUserDto): boolean {
     const email = this.authService.user()?.email;
     return !!email && email.toLowerCase() === user.email.toLowerCase();
   }
 
-  startRoleEdit(user: UserProfile): void {
+  startRoleEdit(user: AdminUserDto): void {
     this.userErrorMessage.set(null);
     this.editingRoleId.set(user.id);
   }
@@ -108,7 +108,7 @@ export class AdminMembership implements OnInit {
     this.editingRoleId.set(null);
   }
 
-  confirmRoleChange(user: UserProfile, selectedRole: string): void {
+  confirmRoleChange(user: AdminUserDto, selectedRole: string): void {
     const newRole = selectedRole as Role;
     if (newRole === user.role) {
       this.editingRoleId.set(null);
@@ -133,7 +133,7 @@ export class AdminMembership implements OnInit {
     });
   }
 
-  onDeleteUser(user: UserProfile): void {
+  onDeleteUser(user: AdminUserDto): void {
     if (!confirm(`Supprimer définitivement le membre "${user.firstName} ${user.lastName}" (${user.email}) ? Cette action est irréversible.`)) {
       return;
     }

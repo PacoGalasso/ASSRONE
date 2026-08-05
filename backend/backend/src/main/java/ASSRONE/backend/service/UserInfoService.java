@@ -9,6 +9,7 @@ import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.UserInfoRepository;
 import org.jspecify.annotations.NullMarked;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -69,7 +70,17 @@ public class UserInfoService implements UserDetailsService {
                 .isActive(true)
                 .build();
 
-        User saved = repository.save(user);
+        User saved;
+        try {
+            saved = repository.save(user);
+        } catch (DataIntegrityViolationException ex) {
+            // The pre-check above can't see a concurrent registration for the
+            // same email landing between that read and this write; the unique
+            // constraint on users.email is the real guarantee, and this
+            // translates its violation into the same clean 409 the pre-check
+            // already produces for the non-concurrent case.
+            throw new UserAlreadyExistsException("Un compte existe déjà avec l'email " + normalizedEmail);
+        }
         return RegisterResponse.builder()
                 .id(saved.getId())
                 .username(saved.getUsername())

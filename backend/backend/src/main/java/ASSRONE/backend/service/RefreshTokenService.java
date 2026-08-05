@@ -123,6 +123,17 @@ public class RefreshTokenService {
         }
     }
 
+    /**
+     * Invalidates every refresh token currently issued to a user, regardless
+     * of which device or session it belongs to. Used after a password
+     * change: a refresh token stolen before the change must not remain
+     * usable afterwards.
+     */
+    @Transactional
+    public void revokeAllForUser(Long userId) {
+        refreshTokenRepository.revokeAllForUser(userId, LocalDateTime.now(clock));
+    }
+
     private boolean isUsable(User user) {
         if (!Boolean.TRUE.equals(user.getIsActive())) {
             return false;
