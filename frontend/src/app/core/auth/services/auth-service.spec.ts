@@ -17,7 +17,6 @@ describe('AuthService', () => {
   };
 
   beforeEach(() => {
-    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
@@ -28,11 +27,37 @@ describe('AuthService', () => {
 
   afterEach(() => {
     httpMock.verify();
-    localStorage.clear();
+  });
+
+  describe('storage isolation', () => {
+    it('should never touch localStorage for the access token', () => {
+      // #given
+      const credentials = {email: 'membre@assrone.ch', password: 'motdepasse123'};
+
+      // #when
+      service.login(credentials).subscribe();
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
+
+      // #then
+      expect(localStorage.getItem('auth_token')).toBeNull();
+      expect(localStorage.length).toBe(0);
+    });
+
+    it('should never touch sessionStorage for the access token', () => {
+      // #given
+      const credentials = {email: 'membre@assrone.ch', password: 'motdepasse123'};
+
+      // #when
+      service.login(credentials).subscribe();
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
+
+      // #then
+      expect(sessionStorage.getItem('auth_token')).toBeNull();
+    });
   });
 
   describe('login', () => {
-    it('should POST credentials with credentials included and store the access token on success', () => {
+    it('should POST credentials with credentials included and place the token only in memory', () => {
       // #given
       const credentials = {email: 'membre@assrone.ch', password: 'motdepasse123'};
 
@@ -48,20 +73,7 @@ describe('AuthService', () => {
 
       expect(service.getToken()).toBe('access-token');
       expect(service.isLoggedIn()).toBe(true);
-    });
-
-    it('should never write a refresh token to localStorage', () => {
-      // #given
-      const credentials = {email: 'membre@assrone.ch', password: 'motdepasse123'};
-
-      // #when
-      service.login(credentials).subscribe();
-
-      // #then
-      httpMock.expectOne('/auth/generateToken').flush(authResponse);
-
-      expect(localStorage.getItem('refresh_token')).toBeNull();
-      expect(Object.keys(localStorage)).not.toContain('refresh_token');
+      expect(localStorage.getItem('auth_token')).toBeNull();
     });
   });
 
@@ -93,7 +105,6 @@ describe('AuthService', () => {
 
       expect(service.isLoggedIn()).toBe(false);
       expect(service.getToken()).toBeNull();
-      expect(localStorage.getItem('auth_token')).toBeNull();
     });
   });
 
@@ -119,26 +130,8 @@ describe('AuthService', () => {
       expect(service.getToken()).toBe('new-access-token');
     });
 
-    it('should never write a refresh token to localStorage after rotation', () => {
+    it('should propagate a backend refresh failure without altering in-memory state', () => {
       // #given
-      const rotated: AuthResponse = {
-        token: 'new-access-token',
-        username: 'membre@assrone.ch',
-        role: 'ROLE_USER'
-      };
-
-      // #when
-      service.refreshToken().subscribe();
-
-      // #then
-      httpMock.expectOne('/auth/refresh').flush(rotated);
-
-      expect(localStorage.getItem('refresh_token')).toBeNull();
-    });
-
-    it('should propagate a backend refresh failure without altering stored auth state', () => {
-      // #given
-      localStorage.setItem('auth_token', 'still-there');
       let receivedError: unknown;
 
       // #when
@@ -149,15 +142,68 @@ describe('AuthService', () => {
       req.flush({error: 'Refresh token invalide ou expiré.'}, {status: 401, statusText: 'Unauthorized'});
 
       expect(receivedError).toBeTruthy();
-      expect(localStorage.getItem('auth_token')).toBe('still-there');
+      expect(service.isLoggedIn()).toBe(false);
+    });
+  });
+
+  describe('restoreSession', () => {
+    it('should place the token and role in memory when the initial refresh succeeds', () => {
+      // #given
+      const admin: AuthResponse = {token: 'restored-token', username: 'admin@assrone.ch', role: 'ROLE_ADMIN'};
+
+      // #when
+      service.restoreSession().subscribe();
+
+      // #then
+      httpMock.expectOne('/auth/refresh').flush(admin);
+
+      expect(service.isLoggedIn()).toBe(true);
+      expect(service.getToken()).toBe('restored-token');
+      expect(service.isAdmin()).toBe(true);
+    });
+
+    it('should restore a ROLE_USER identity correctly', () => {
+      // #given
+      const member: AuthResponse = {token: 'restored-token', username: 'membre@assrone.ch', role: 'ROLE_USER'};
+
+      // #when
+      service.restoreSession().subscribe();
+
+      // #then
+      httpMock.expectOne('/auth/refresh').flush(member);
+
+      expect(service.isLoggedIn()).toBe(true);
+      expect(service.isAdmin()).toBe(false);
+      expect(service.user()?.role).toBe('ROLE_USER');
+    });
+
+    it('should resolve to a logged-out state, without throwing, when the initial refresh is rejected', () => {
+      // #given
+      let completed = false;
+      let errored = false;
+
+      // #when
+      service.restoreSession().subscribe({
+        next: () => completed = true,
+        error: () => errored = true
+      });
+
+      // #then
+      httpMock.expectOne('/auth/refresh')
+        .flush({error: 'Refresh token invalide ou expiré.'}, {status: 401, statusText: 'Unauthorized'});
+
+      expect(errored).toBe(false);
+      expect(completed).toBe(true);
+      expect(service.isLoggedIn()).toBe(false);
+      expect(service.getToken()).toBeNull();
     });
   });
 
   describe('logout', () => {
-    it('should always call the backend with credentials included, clear storage and redirect home', () => {
+    it('should call the backend with credentials included, clear in-memory state and redirect home', () => {
       // #given
-      localStorage.setItem('auth_token', 'access-token');
-      localStorage.setItem('auth_user', JSON.stringify({username: 'membre@assrone.ch', role: 'ROLE_USER'}));
+      service.login({email: 'membre@assrone.ch', password: 'motdepasse123'}).subscribe();
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
       const navigateSpy = vi.spyOn(router, 'navigate');
 
       // #when
@@ -170,25 +216,16 @@ describe('AuthService', () => {
       expect(req.request.withCredentials).toBe(true);
       req.flush(null);
 
-      expect(localStorage.getItem('auth_token')).toBeNull();
-      expect(localStorage.getItem('auth_user')).toBeNull();
+      expect(service.getToken()).toBeNull();
+      expect(service.user()).toBeNull();
       expect(navigateSpy).toHaveBeenCalledWith(['/']);
     });
 
-    it('should call the backend even with no visible client-side auth state', () => {
-      // #given no token stored client-side (an HttpOnly refresh cookie could
-      // still exist server-side, invisible to this code either way)
-
-      // #when
-      service.logout();
-
-      // #then
-      httpMock.expectOne('/auth/logout').flush(null);
-    });
-
-    it('should still clear local state even if the backend call fails', () => {
+    it('should clear in-memory state and redirect home even when the backend call fails', () => {
       // #given
-      localStorage.setItem('auth_token', 'access-token');
+      service.login({email: 'membre@assrone.ch', password: 'motdepasse123'}).subscribe();
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
+      const navigateSpy = vi.spyOn(router, 'navigate');
 
       // #when
       service.logout();
@@ -197,13 +234,14 @@ describe('AuthService', () => {
       const req = httpMock.expectOne('/auth/logout');
       req.flush({error: 'boom'}, {status: 500, statusText: 'Internal Server Error'});
 
-      expect(localStorage.getItem('auth_token')).toBeNull();
       expect(service.isLoggedIn()).toBe(false);
+      expect(service.getToken()).toBeNull();
+      expect(navigateSpy).toHaveBeenCalledWith(['/']);
     });
   });
 
   describe('isAdmin', () => {
-    it('should return true only when the stored role is ROLE_ADMIN', () => {
+    it('should return true only when the in-memory role is ROLE_ADMIN', () => {
       // #given
       service.login({email: 'admin@assrone.ch', password: 'motdepasse123'}).subscribe();
       httpMock.expectOne('/auth/generateToken').flush({...authResponse, role: 'ROLE_ADMIN'});
@@ -217,6 +255,50 @@ describe('AuthService', () => {
 
       // #when / #then
       expect(service.isAdmin()).toBe(false);
+    });
+  });
+
+  describe('cross-tab logout sync', () => {
+    it('should clear this tab\'s in-memory state, without navigating, when another tab broadcasts logout', async () => {
+      // #given: this tab is logged in, as if restored independently in its own memory
+      service.login({email: 'membre@assrone.ch', password: 'motdepasse123'}).subscribe();
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
+      expect(service.isLoggedIn()).toBe(true);
+      const navigateSpy = vi.spyOn(router, 'navigate');
+      const senderChannel = new BroadcastChannel('assrone-auth');
+
+      try {
+        // #when: another tab's AuthService instance posts the logout message
+        senderChannel.postMessage('logout');
+
+        // #then
+        await vi.waitFor(() => expect(service.isLoggedIn()).toBe(false));
+        expect(service.getToken()).toBeNull();
+        expect(navigateSpy).not.toHaveBeenCalled();
+      } finally {
+        senderChannel.close();
+      }
+    });
+
+    it('should never include a token value in the broadcast message', async () => {
+      // #given
+      service.login({email: 'membre@assrone.ch', password: 'motdepasse123'}).subscribe();
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
+      const receiverChannel = new BroadcastChannel('assrone-auth');
+      const received: unknown[] = [];
+      receiverChannel.onmessage = (event) => received.push(event.data);
+
+      try {
+        // #when
+        service.logout();
+        httpMock.expectOne('/auth/logout').flush(null);
+
+        // #then
+        await vi.waitFor(() => expect(received).toEqual(['logout']));
+        expect(JSON.stringify(received)).not.toContain('access-token');
+      } finally {
+        receiverChannel.close();
+      }
     });
   });
 });

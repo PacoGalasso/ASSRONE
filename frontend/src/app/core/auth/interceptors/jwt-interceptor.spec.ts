@@ -4,14 +4,20 @@ import {HttpTestingController, provideHttpClientTesting} from '@angular/common/h
 import {provideRouter} from '@angular/router';
 import {JwtInterceptor} from './jwt-interceptor';
 import {AuthService} from '../services/auth-service';
+import {AuthResponse} from '../models/auth.models';
 
 describe('JwtInterceptor', () => {
   let http: HttpClient;
   let httpMock: HttpTestingController;
   let authService: AuthService;
 
+  const authResponse: AuthResponse = {
+    token: 'access-token',
+    username: 'membre@assrone.ch',
+    role: 'ROLE_USER'
+  };
+
   beforeEach(() => {
-    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptorsFromDi()),
@@ -20,31 +26,28 @@ describe('JwtInterceptor', () => {
         {provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true}
       ]
     });
+    http = TestBed.inject(HttpClient);
+    httpMock = TestBed.inject(HttpTestingController);
+    authService = TestBed.inject(AuthService);
   });
 
   afterEach(() => {
     httpMock.verify();
-    localStorage.clear();
   });
 
   /**
-   * JwtInterceptor (and, through it, AuthService) is constructed as soon as
-   * HttpClient is first injected, because the DI-based interceptor chain
-   * reads HTTP_INTERCEPTORS eagerly. AuthService's token signal is seeded
-   * from localStorage only at that construction moment, so any test relying
-   * on an initial token must populate localStorage before calling this, not
-   * after.
+   * Seeds an in-memory access token the same way the app ever legitimately
+   * gets one — through a real login() call — since AuthService no longer
+   * reads anything from storage at construction time.
    */
-  function injectHttp(): void {
-    http = TestBed.inject(HttpClient);
-    httpMock = TestBed.inject(HttpTestingController);
-    authService = TestBed.inject(AuthService);
+  function loginWith(token: string): void {
+    authService.login({email: 'membre@assrone.ch', password: 'motdepasse123'}).subscribe();
+    httpMock.expectOne('/auth/generateToken').flush({...authResponse, token});
   }
 
   it('should attach the bearer token to protected requests', () => {
     // #given
-    localStorage.setItem('auth_token', 'access-token');
-    injectHttp();
+    loginWith('access-token');
 
     // #when
     http.get('/api/documents').subscribe();
@@ -55,9 +58,20 @@ describe('JwtInterceptor', () => {
     req.flush([]);
   });
 
-  it('should not attach a bearer token to public auth endpoints', () => {
+  it('should not attach a bearer token, and never send the literal string "undefined", when no token is in memory yet', () => {
+    // #given no login performed — as is always the case before app initializer restoration
+
+    // #when
+    http.get('/api/documents').subscribe();
+
+    // #then
+    const req = httpMock.expectOne('/api/documents');
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush([]);
+  });
+
+  it('should not attach a bearer token to /auth/generateToken', () => {
     // #given no token needed for login
-    injectHttp();
 
     // #when
     http.post('/auth/generateToken', {}).subscribe();
@@ -68,10 +82,36 @@ describe('JwtInterceptor', () => {
     req.flush({});
   });
 
+  it('should not attach a bearer token to /auth/refresh and must not intercept its own 401', () => {
+    // #given
+    loginWith('access-token');
+
+    // #when
+    authService.refreshToken().subscribe({error: () => undefined});
+
+    // #then: exactly one request, no recursive refresh-of-a-refresh
+    const req = httpMock.expectOne('/auth/refresh');
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush({error: 'expired'}, {status: 401, statusText: 'Unauthorized'});
+    httpMock.expectNone('/auth/refresh');
+  });
+
+  it('should not attach a bearer token to /auth/logout', () => {
+    // #given
+    loginWith('access-token');
+
+    // #when
+    authService.logout();
+
+    // #then
+    const req = httpMock.expectOne('/auth/logout');
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush(null);
+  });
+
   it('should refresh once and retry the failed request on a single 401', () => {
     // #given
-    localStorage.setItem('auth_token', 'expired-token');
-    injectHttp();
+    loginWith('expired-token');
 
     // #when
     http.get('/api/documents').subscribe();
@@ -96,8 +136,7 @@ describe('JwtInterceptor', () => {
 
   it('should send exactly one refresh call and resume all queued requests when multiple 401s arrive concurrently', () => {
     // #given
-    localStorage.setItem('auth_token', 'expired-token');
-    injectHttp();
+    loginWith('expired-token');
 
     // #when
     http.get('/api/documents').subscribe();
@@ -125,8 +164,7 @@ describe('JwtInterceptor', () => {
 
   it('should log out and propagate the error, without looping, when the refresh call itself fails', () => {
     // #given
-    localStorage.setItem('auth_token', 'expired-token');
-    injectHttp();
+    loginWith('expired-token');
     const logoutSpy = vi.spyOn(authService, 'logout').mockImplementation(() => {});
     let receivedError: unknown;
 
@@ -146,8 +184,7 @@ describe('JwtInterceptor', () => {
 
   it('should also error out queued requests, instead of hanging, when the shared refresh fails', () => {
     // #given
-    localStorage.setItem('auth_token', 'expired-token');
-    injectHttp();
+    loginWith('expired-token');
     vi.spyOn(authService, 'logout').mockImplementation(() => {});
     let firstError: unknown;
     let secondError: unknown;
