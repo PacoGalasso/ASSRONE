@@ -35,7 +35,9 @@ public class SecurityConfig {
     // the audit for this lot: no camera/microphone/geolocation/payment API call,
     // no clipboard/USB/Bluetooth/sensor access, no fullscreen or autoplay usage)
     // — every one is explicitly denied rather than left to the browser's default.
-    private static final String PERMISSIONS_POLICY = String.join(", ",
+    // Package-private (not private) so a test can assert deployment/nginx/assrone.conf.example's
+    // Permissions-Policy value never silently drifts from this one.
+    static final String PERMISSIONS_POLICY = String.join(", ",
             "accelerometer=()", "autoplay=()", "bluetooth=()", "camera=()",
             "clipboard-read=()", "clipboard-write=()", "fullscreen=()", "geolocation=()",
             "gyroscope=()", "magnetometer=()", "microphone=()", "payment=()",
@@ -86,6 +88,7 @@ public class SecurityConfig {
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.GET, "/health").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/events/*/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/events").hasRole("ADMIN")

@@ -21,7 +21,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class CspUpgradeInsecureRequestsPropertyTest {
 
-    private static final String VALID_JWT_SECRET = "zTjvaDrwlDQTMdHQ9vSfqXGwdkGSXJtT09uCOP+KLfO0RmyO617AZi/hK7VKCiKe";
+    // Deliberately NOT BackendApplicationTests'/application-local.properties' shared
+    // test secret: ProductionSecurityGuard refuses that specific value under the
+    // production profile (see ProductionSecurityGuardTest), and the production-profile
+    // test below needs startup to actually succeed.
+    private static final String VALID_JWT_SECRET = "dl7LgN70O7lO5bfvdzeP6w+S4qbEOnzqBrX2tBitUL37dVP7+8KiN1274N5jFGJZ";
 
     private static SpringApplicationBuilder baseBuilder(String dbName) {
         return new SpringApplicationBuilder(BackendApplication.class)
