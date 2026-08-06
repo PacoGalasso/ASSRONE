@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.exception.InvalidRefreshTokenException;
 import ASSRONE.backend.model.RefreshToken;
 import ASSRONE.backend.model.User;
@@ -39,9 +42,10 @@ public class RefreshTokenService {
     private final UserInfoRepository userInfoRepository;
     private final JwtService jwtService;
     private final Clock clock;
+    private final SecurityAuditService securityAuditService;
 
     public record IssuedTokens(String accessToken, String refreshToken, String role, String email,
-                                Duration refreshTokenMaxAge) {
+                                Duration refreshTokenMaxAge, Long userId) {
     }
 
     @Transactional
@@ -61,15 +65,21 @@ public class RefreshTokenService {
             email = jwtService.extractUsername(presentedRefreshToken);
             jti = jwtService.extractJti(presentedRefreshToken);
         } catch (JwtException | IllegalArgumentException ex) {
+            recordRefreshDenied(SecurityEventType.REFRESH_DENIED, "-", "MALFORMED_TOKEN");
             throw new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
         if (!JwtService.TOKEN_TYPE_REFRESH.equals(type) || jti == null || email == null) {
+            recordRefreshDenied(SecurityEventType.REFRESH_DENIED, SecurityAuditService.maskEmail(email),
+                    "INVALID_TOKEN_TYPE_OR_CLAIMS");
             throw new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
         RefreshToken stored = refreshTokenRepository.findByJti(jti)
-                .orElseThrow(() -> new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE));
+                .orElseThrow(() -> {
+                    recordRefreshDenied(SecurityEventType.REFRESH_DENIED, SecurityAuditService.maskEmail(email), "UNKNOWN_JTI");
+                    return new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
+                });
 
         if (stored.getRevokedAt() != null) {
             // A revoked jti being presented again means either the original
@@ -78,28 +88,43 @@ public class RefreshTokenService {
             // family of tokens for this user is now suspect: revoke all of
             // them rather than just this one.
             refreshTokenRepository.revokeAllForUser(stored.getUserId(), LocalDateTime.now(clock));
+            recordRefreshDenied(SecurityEventType.REFRESH_TOKEN_REUSE_DETECTED,
+                    String.valueOf(stored.getUserId()), "REVOKED_TOKEN_REUSED");
             throw new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
         if (stored.getExpiresAt().isBefore(LocalDateTime.now(clock))) {
+            recordRefreshDenied(SecurityEventType.REFRESH_DENIED, String.valueOf(stored.getUserId()), "EXPIRED");
             throw new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
         if (!constantTimeEquals(stored.getTokenHash(), hash(presentedRefreshToken))) {
             // The jti matched but the token's own hash doesn't — never trust
             // a jti match alone to authorize rotation.
+            recordRefreshDenied(SecurityEventType.REFRESH_DENIED, String.valueOf(stored.getUserId()), "HASH_MISMATCH");
             throw new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
         User user = userInfoRepository.findByEmail(email)
-                .orElseThrow(() -> new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE));
+                .orElseThrow(() -> {
+                    recordRefreshDenied(SecurityEventType.REFRESH_DENIED, String.valueOf(stored.getUserId()), "USER_NOT_FOUND");
+                    return new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
+                });
         if (!isUsable(user)) {
+            recordRefreshDenied(SecurityEventType.REFRESH_DENIED, String.valueOf(user.getId()), "ACCOUNT_NOT_USABLE");
             throw new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
         }
 
         refreshTokenRepository.revokeByJti(jti, LocalDateTime.now(clock));
 
-        return mintAndPersist(user);
+        IssuedTokens tokens = mintAndPersist(user);
+        securityAuditService.record(SecurityEventType.REFRESH_SUCCESS, SecurityEventResult.SUCCESS,
+                String.valueOf(user.getId()), tokens.role(), "refreshToken", null, null);
+        return tokens;
+    }
+
+    private void recordRefreshDenied(SecurityEventType eventType, String actorId, String reasonCode) {
+        securityAuditService.record(eventType, SecurityEventResult.DENIED, actorId, null, "refreshToken", null, reasonCode);
     }
 
     /**
@@ -111,16 +136,24 @@ public class RefreshTokenService {
     @Transactional
     public void revoke(String presentedRefreshToken) {
         if (presentedRefreshToken == null || presentedRefreshToken.isBlank()) {
+            securityAuditService.record(SecurityEventType.LOGOUT, SecurityEventResult.SUCCESS,
+                    "-", null, "refreshToken", null, "NO_SESSION");
             return;
         }
         try {
             String jti = jwtService.extractJti(presentedRefreshToken);
+            String email = jwtService.extractUsername(presentedRefreshToken);
             if (jti != null) {
                 refreshTokenRepository.revokeByJti(jti, LocalDateTime.now(clock));
             }
+            securityAuditService.record(SecurityEventType.LOGOUT, SecurityEventResult.SUCCESS,
+                    SecurityAuditService.maskEmail(email), null, "refreshToken", null,
+                    jti != null ? "SESSION_REVOKED" : "NO_JTI");
         } catch (JwtException | IllegalArgumentException ignored) {
             // Malformed or already-expired token presented at logout: nothing
             // to revoke, not a failure the caller needs to know about.
+            securityAuditService.record(SecurityEventType.LOGOUT, SecurityEventResult.SUCCESS,
+                    "-", null, "refreshToken", null, "MALFORMED_TOKEN");
         }
     }
 
@@ -171,7 +204,7 @@ public class RefreshTokenService {
         // that trap entirely and stays correct across DST transitions and
         // regardless of the JVM's default time zone.
         Duration maxAge = Duration.between(clock.instant(), expirationInstant);
-        return new IssuedTokens(accessToken, refreshToken, role, user.getEmail(), maxAge);
+        return new IssuedTokens(accessToken, refreshToken, role, user.getEmail(), maxAge, user.getId());
     }
 
     private static String hash(String rawToken) {

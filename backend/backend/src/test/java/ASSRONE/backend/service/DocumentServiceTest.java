@@ -1,5 +1,7 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.dto.DocumentDto;
 import ASSRONE.backend.exception.InvalidDocumentException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
@@ -7,6 +9,7 @@ import ASSRONE.backend.mapper.DocumentMapper;
 import ASSRONE.backend.model.Document;
 import ASSRONE.backend.model.DocumentVisibility;
 import ASSRONE.backend.repository.DocumentRepository;
+import ASSRONE.backend.security.ClientIpResolver;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
@@ -62,7 +65,8 @@ class DocumentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DocumentService(documentRepository, documentMapper, new PdfDocumentInspector());
+        service = new DocumentService(documentRepository, documentMapper, new PdfDocumentInspector(),
+                new SecurityAuditService(new ClientIpResolver("")));
         ReflectionTestUtils.setField(service, "uploadDir", uploadDir.toString());
     }
 
@@ -106,7 +110,8 @@ class DocumentServiceTest {
     }
 
     private DocumentService serviceWithInspector(PdfDocumentInspector inspector) {
-        DocumentService instance = new DocumentService(documentRepository, documentMapper, inspector);
+        DocumentService instance = new DocumentService(documentRepository, documentMapper, inspector,
+                new SecurityAuditService(new ClientIpResolver("")));
         ReflectionTestUtils.setField(instance, "uploadDir", uploadDir.toString());
         return instance;
     }
@@ -510,6 +515,35 @@ class DocumentServiceTest {
 
         verify(documentRepository).delete(document);
         assertThat(uploadDir.resolve("a-supprimer")).doesNotExist();
+    }
+
+    @Test
+    void deleteReussiJournaliseDocumentDeleted() throws IOException {
+        Files.write(uploadDir.resolve("a-supprimer-audit"), "contenu".getBytes());
+        Document document = existingDocument("a-supprimer-audit");
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.delete(1L);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=DOCUMENT_DELETED").contains("result=SUCCESS").contains("targetId=1");
+        }
+    }
+
+    @Test
+    void uploadReussiJournaliseDocumentUploadedSansExposerLEmailComplet() throws IOException {
+        stubSuccessfulSave();
+        MockMultipartFile file = new MockMultipartFile("file", "rapport.pdf", "application/pdf", validPdfBytes());
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.upload(file, "Rapport", "Description", "admin@assrone.ch", DocumentVisibility.MEMBERS);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=DOCUMENT_UPLOADED")
+                    .contains("result=SUCCESS")
+                    .doesNotContain("admin@assrone.ch");
+        }
     }
 
     @Test

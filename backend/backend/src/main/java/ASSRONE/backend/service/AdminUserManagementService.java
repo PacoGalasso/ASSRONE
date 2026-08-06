@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.exception.LastAdministratorException;
 import ASSRONE.backend.exception.SelfActionForbiddenException;
 import ASSRONE.backend.exception.UserDeletionConflictException;
@@ -34,15 +37,17 @@ public class AdminUserManagementService {
 
     private final UserInfoRepository repository;
     private final EntityManager entityManager;
+    private final SecurityAuditService securityAuditService;
 
     @Transactional
     public void changeRole(String actorEmail, Long targetId, UserRole newRole) {
-        User target = loadTarget(targetId);
-        rejectSelfAction(actorEmail, target, "Un administrateur ne peut pas modifier son propre rôle.");
+        User target = loadTarget(actorEmail, targetId, "ROLE_CHANGE");
+        rejectSelfAction(actorEmail, target, "ROLE_CHANGE", "Un administrateur ne peut pas modifier son propre rôle.");
 
         if (ADMIN_ROLE.equals(target.getRole()) && newRole != UserRole.ADMIN) {
             acquireAdminGuardLock();
             if (repository.countByRole(ADMIN_ROLE) <= 1) {
+                recordDenied(actorEmail, targetId, "ROLE_CHANGE", "LAST_ADMINISTRATOR_PROTECTED");
                 throw new LastAdministratorException("Impossible de rétrograder le dernier administrateur.");
             }
         }
@@ -57,18 +62,23 @@ public class AdminUserManagementService {
             // The target existed moments ago (loadTarget) but the UPDATE affected no
             // row — it was deleted by another operation in between. Never treat this
             // as a silent success.
+            recordDenied(actorEmail, targetId, "ROLE_CHANGE", "TARGET_NOT_FOUND");
             throw new UserNotFoundException("Utilisateur introuvable : " + targetId);
         }
+
+        securityAuditService.record(SecurityEventType.ROLE_CHANGE, SecurityEventResult.SUCCESS,
+                SecurityAuditService.maskEmail(actorEmail), null, "user", String.valueOf(targetId), newRole.name());
     }
 
     @Transactional
     public void deleteUser(String actorEmail, Long targetId) {
-        User target = loadTarget(targetId);
-        rejectSelfAction(actorEmail, target, "Un administrateur ne peut pas supprimer son propre compte.");
+        User target = loadTarget(actorEmail, targetId, "USER_DELETED");
+        rejectSelfAction(actorEmail, target, "USER_DELETED", "Un administrateur ne peut pas supprimer son propre compte.");
 
         if (ADMIN_ROLE.equals(target.getRole())) {
             acquireAdminGuardLock();
             if (repository.countByRole(ADMIN_ROLE) <= 1) {
+                recordDenied(actorEmail, targetId, "USER_DELETED", "LAST_ADMINISTRATOR_PROTECTED");
                 throw new LastAdministratorException("Impossible de supprimer le dernier administrateur.");
             }
         }
@@ -77,20 +87,34 @@ public class AdminUserManagementService {
             repository.deleteById(targetId);
             repository.flush();
         } catch (DataIntegrityViolationException ex) {
+            recordDenied(actorEmail, targetId, "USER_DELETED", "DELETION_CONFLICT");
             throw new UserDeletionConflictException(
                     "Suppression impossible : cet utilisateur est référencé par d'autres données.");
         }
+
+        securityAuditService.record(SecurityEventType.USER_DELETED, SecurityEventResult.SUCCESS,
+                SecurityAuditService.maskEmail(actorEmail), null, "user", String.valueOf(targetId), null);
     }
 
-    private User loadTarget(Long targetId) {
+    private User loadTarget(String actorEmail, Long targetId, String action) {
         return repository.findById(targetId)
-                .orElseThrow(() -> new UserNotFoundException("Utilisateur introuvable : " + targetId));
+                .orElseThrow(() -> {
+                    recordDenied(actorEmail, targetId, action, "TARGET_NOT_FOUND");
+                    return new UserNotFoundException("Utilisateur introuvable : " + targetId);
+                });
     }
 
-    private void rejectSelfAction(String actorEmail, User target, String message) {
+    private void rejectSelfAction(String actorEmail, User target, String action, String message) {
         if (target.getEmail().equalsIgnoreCase(actorEmail)) {
+            recordDenied(actorEmail, target.getId(), action, "SELF_ACTION_FORBIDDEN");
             throw new SelfActionForbiddenException(message);
         }
+    }
+
+    private void recordDenied(String actorEmail, Long targetId, String action, String reasonCode) {
+        securityAuditService.record(SecurityEventType.ADMIN_ACTION_DENIED, SecurityEventResult.DENIED,
+                SecurityAuditService.maskEmail(actorEmail), null, "user",
+                targetId == null ? null : String.valueOf(targetId), action + ":" + reasonCode);
     }
 
     private void acquireAdminGuardLock() {

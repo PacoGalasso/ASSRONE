@@ -1,5 +1,8 @@
 package ASSRONE.backend.filter;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.ratelimit.RateLimitCategory;
 import ASSRONE.backend.ratelimit.RateLimitedRoute;
 import ASSRONE.backend.ratelimit.RateLimitedRoutes;
@@ -41,6 +44,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private final RateLimiterService rateLimiterService;
     private final ClientIpResolver clientIpResolver;
+    private final SecurityAuditService securityAuditService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -59,6 +63,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
+        securityAuditService.record(request, SecurityEventType.RATE_LIMIT_EXCEEDED, SecurityEventResult.DENIED,
+                null, null, "rate-limit-category", category.get().name(), "QUOTA_EXCEEDED");
         writeTooManyRequests(response, probe.getNanosToWaitForRefill());
     }
 

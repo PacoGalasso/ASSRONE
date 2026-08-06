@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.DocumentDto;
 import ASSRONE.backend.exception.InvalidDocumentException;
 import ASSRONE.backend.exception.ResourceNotFoundException;
@@ -15,6 +18,7 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,6 +40,7 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentMapper documentMapper;
     private final PdfDocumentInspector pdfDocumentInspector;
+    private final SecurityAuditService securityAuditService;
 
     @Value("${app.upload-dir}")
     private String uploadDir;
@@ -87,6 +92,8 @@ public class DocumentService {
             throw ex;
         }
 
+        securityAuditService.record(SecurityEventType.DOCUMENT_UPLOADED, SecurityEventResult.SUCCESS,
+                SecurityAuditService.maskEmail(uploadedBy), null, "document", String.valueOf(saved.getId()), null);
         return documentMapper.toDto(saved);
     }
 
@@ -141,6 +148,11 @@ public class DocumentService {
         Path path = resolveStoragePath(document.getStoredFilename());
         documentRepository.delete(document);
         deleteQuietly(path);
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String actorId = authentication != null ? SecurityAuditService.maskEmail(authentication.getName()) : "-";
+        securityAuditService.record(SecurityEventType.DOCUMENT_DELETED, SecurityEventResult.SUCCESS,
+                actorId, null, "document", String.valueOf(id), null);
     }
 
     private Path resolveStorageRoot() {

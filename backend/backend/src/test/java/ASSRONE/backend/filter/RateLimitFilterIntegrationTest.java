@@ -1,5 +1,6 @@
 package ASSRONE.backend.filter;
 
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.controller.ContactController;
 import ASSRONE.backend.controller.EventController;
 import ASSRONE.backend.controller.MembershipApplicationController;
@@ -63,18 +64,21 @@ class RateLimitFilterIntegrationTest {
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
         when(refreshTokenService.issueTokens(any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
-                        Duration.ofDays(7)));
+                        Duration.ofDays(7), 1L));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         contactEmailService = mock(ContactEmailService.class);
         membershipApplicationService = mock(MembershipApplicationService.class);
         eventService = mock(EventService.class);
 
+        ClientIpResolver clientIpResolver = new ClientIpResolver("");
         RateLimiterService rateLimiterService = new RateLimiterService(
                 TimeMeter.SYSTEM_NANOTIME, com.github.benmanes.caffeine.cache.Ticker.systemTicker());
-        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, new ClientIpResolver(""));
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, clientIpResolver,
+                new SecurityAuditService(clientIpResolver));
 
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory("refresh_token", false, "Lax", "/auth");
-        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory);
+        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager,
+                loginAttemptService, refreshCookieFactory, new SecurityAuditService(clientIpResolver));
         ContactController contactController = new ContactController(contactEmailService);
         MembershipApplicationController membershipApplicationController =
                 new MembershipApplicationController(membershipApplicationService);
@@ -260,18 +264,21 @@ class RateLimitFilterIntegrationTest {
     }
 
     private MockMvc mockMvcWithTrustedProxies(String trustedProxiesCsv) {
+        ClientIpResolver clientIpResolver = new ClientIpResolver(trustedProxiesCsv);
         RateLimiterService rateLimiterService = new RateLimiterService(
                 TimeMeter.SYSTEM_NANOTIME, com.github.benmanes.caffeine.cache.Ticker.systemTicker());
-        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, new ClientIpResolver(trustedProxiesCsv));
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, clientIpResolver,
+                new SecurityAuditService(clientIpResolver));
 
         UserInfoService userInfoService = mock(UserInfoService.class);
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
         when(refreshTokenService.issueTokens(any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
-                        Duration.ofDays(7)));
+                        Duration.ofDays(7), 1L));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory("refresh_token", false, "Lax", "/auth");
-        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory);
+        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager,
+                loginAttemptService, refreshCookieFactory, new SecurityAuditService(clientIpResolver));
 
         return MockMvcBuilders
                 .standaloneSetup(userController)

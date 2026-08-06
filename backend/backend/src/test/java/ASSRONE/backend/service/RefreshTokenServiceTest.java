@@ -1,10 +1,13 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.exception.InvalidRefreshTokenException;
 import ASSRONE.backend.model.RefreshToken;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.RefreshTokenRepository;
 import ASSRONE.backend.repository.UserInfoRepository;
+import ASSRONE.backend.security.ClientIpResolver;
 import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,7 +49,8 @@ class RefreshTokenServiceTest {
         refreshTokenRepository = mock(RefreshTokenRepository.class);
         userInfoRepository = mock(UserInfoRepository.class);
         jwtService = mock(JwtService.class);
-        service = new RefreshTokenService(refreshTokenRepository, userInfoRepository, jwtService, FIXED_CLOCK);
+        service = new RefreshTokenService(refreshTokenRepository, userInfoRepository, jwtService, FIXED_CLOCK,
+                new SecurityAuditService(new ClientIpResolver("")));
     }
 
     private static User usableUser() {
@@ -197,7 +201,8 @@ class RefreshTokenServiceTest {
     void rotateCalculeAussiUnMaxAgeIndependantDuFuseauHoraireDuClock() {
         Clock zurichClock = Clock.fixed(NOW_INSTANT, ZoneId.of("Europe/Zurich"));
         RefreshTokenService zurichService =
-                new RefreshTokenService(refreshTokenRepository, userInfoRepository, jwtService, zurichClock);
+                new RefreshTokenService(refreshTokenRepository, userInfoRepository, jwtService, zurichClock,
+                        new SecurityAuditService(new ClientIpResolver("")));
         User user = usableUser();
         String presented = "refresh-token-valide-zurich";
         String hash = sha256Hex(presented);
@@ -223,7 +228,8 @@ class RefreshTokenServiceTest {
         RefreshTokenRepository repo = mock(RefreshTokenRepository.class);
         UserInfoRepository userRepo = mock(UserInfoRepository.class);
         JwtService jwt = mock(JwtService.class);
-        RefreshTokenService clockedService = new RefreshTokenService(repo, userRepo, jwt, clock);
+        RefreshTokenService clockedService = new RefreshTokenService(repo, userRepo, jwt, clock,
+                new SecurityAuditService(new ClientIpResolver("")));
         User user = usableUser();
 
         when(userRepo.findByEmail(EMAIL)).thenReturn(Optional.of(user));
@@ -442,5 +448,105 @@ class RefreshTokenServiceTest {
         service.revoke(malforme);
 
         verifyNoInteractions(refreshTokenRepository);
+    }
+
+    // ===== Journalisation d'audit =====
+
+    @Test
+    void rotationReussieJournaliseRefreshSuccessAvecIdInterne() {
+        User user = usableUser();
+        String presented = "refresh-token-valide";
+        String hash = sha256Hex(presented);
+        RefreshToken stored = storedToken("jti-audit-1", hash, LocalDateTime.now(FIXED_CLOCK).plusDays(1), null);
+
+        when(jwtService.extractTokenType(presented)).thenReturn(JwtService.TOKEN_TYPE_REFRESH);
+        when(jwtService.extractUsername(presented)).thenReturn(EMAIL);
+        when(jwtService.extractJti(presented)).thenReturn("jti-audit-1");
+        when(refreshTokenRepository.findByJti("jti-audit-1")).thenReturn(Optional.of(stored));
+        when(userInfoRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(jwtService.generateToken(EMAIL)).thenReturn("nouveau-access-token");
+        when(jwtService.generateRefreshToken(eq(EMAIL), anyString())).thenReturn("nouveau-refresh-token");
+        when(jwtService.extractExpiration("nouveau-refresh-token")).thenReturn(Date.from(NOW_INSTANT.plusSeconds(3600)));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.rotate(presented);
+
+            String line = capture.messages().get(capture.messages().size() - 1);
+            assertThat(line).contains("eventType=REFRESH_SUCCESS")
+                    .contains("result=SUCCESS")
+                    .contains("actorId=1")
+                    .doesNotContain(presented)
+                    .doesNotContain("nouveau-refresh-token");
+        }
+    }
+
+    @Test
+    void refusPourJtiInconnuJournaliseRefreshDeniedSansToken() {
+        String presented = "refresh-jti-inconnu-audit";
+        when(jwtService.extractTokenType(presented)).thenReturn(JwtService.TOKEN_TYPE_REFRESH);
+        when(jwtService.extractUsername(presented)).thenReturn(EMAIL);
+        when(jwtService.extractJti(presented)).thenReturn("jti-inconnu-audit");
+        when(refreshTokenRepository.findByJti("jti-inconnu-audit")).thenReturn(Optional.empty());
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            assertThatThrownBy(() -> service.rotate(presented)).isInstanceOf(InvalidRefreshTokenException.class);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=REFRESH_DENIED")
+                    .contains("result=DENIED")
+                    .contains("reasonCode=UNKNOWN_JTI")
+                    .doesNotContain(presented);
+        }
+    }
+
+    @Test
+    void reutilisationDunTokenRevoqueJournaliseRefreshTokenReuseDetectedAvecIdDuTokenVole() {
+        String presented = "refresh-deja-revoque-audit";
+        String hash = sha256Hex(presented);
+        RefreshToken stored = storedToken("jti-reuse-audit", hash, LocalDateTime.now(FIXED_CLOCK).plusDays(1),
+                LocalDateTime.now(FIXED_CLOCK).minusMinutes(5));
+
+        when(jwtService.extractTokenType(presented)).thenReturn(JwtService.TOKEN_TYPE_REFRESH);
+        when(jwtService.extractUsername(presented)).thenReturn(EMAIL);
+        when(jwtService.extractJti(presented)).thenReturn("jti-reuse-audit");
+        when(refreshTokenRepository.findByJti("jti-reuse-audit")).thenReturn(Optional.of(stored));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            assertThatThrownBy(() -> service.rotate(presented)).isInstanceOf(InvalidRefreshTokenException.class);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=REFRESH_TOKEN_REUSE_DETECTED")
+                    .contains("result=DENIED")
+                    .contains("actorId=1")
+                    .doesNotContain(presented);
+        }
+    }
+
+    @Test
+    void logoutAvecUnTokenValideJournaliseLogoutSansExposerLeToken() {
+        String presented = "refresh-a-revoquer-audit";
+        when(jwtService.extractJti(presented)).thenReturn("jti-logout-audit");
+        when(jwtService.extractUsername(presented)).thenReturn(EMAIL);
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.revoke(presented);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=LOGOUT")
+                    .contains("result=SUCCESS")
+                    .contains("reasonCode=SESSION_REVOKED")
+                    .doesNotContain(presented);
+        }
+    }
+
+    @Test
+    void logoutSansCookieJournaliseLogoutAvecReasonCodeNoSession() {
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.revoke(null);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=LOGOUT")
+                    .contains("reasonCode=NO_SESSION");
+        }
     }
 }

@@ -1,5 +1,7 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.exception.LastAdministratorException;
 import ASSRONE.backend.exception.SelfActionForbiddenException;
 import ASSRONE.backend.exception.UserDeletionConflictException;
@@ -7,6 +9,7 @@ import ASSRONE.backend.exception.UserNotFoundException;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.model.UserRole;
 import ASSRONE.backend.repository.UserInfoRepository;
+import ASSRONE.backend.security.ClientIpResolver;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +21,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -43,7 +47,8 @@ class AdminUserManagementServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminUserManagementService(repository, entityManager);
+        service = new AdminUserManagementService(repository, entityManager,
+                new SecurityAuditService(new ClientIpResolver("")));
         lenient().when(entityManager.createNativeQuery(anyString())).thenReturn(lockQuery);
         lenient().when(lockQuery.setParameter(anyString(), any())).thenReturn(lockQuery);
     }
@@ -176,5 +181,86 @@ class AdminUserManagementServiceTest {
 
         assertThatThrownBy(() -> service.deleteUser("admin@assrone.ch", 2L))
                 .isInstanceOf(UserDeletionConflictException.class);
+    }
+
+    // ===== Journalisation d'audit =====
+
+    @Test
+    void changementDeRoleReussiJournaliseRoleChangeAvecLeNouveauRoleEnReasonCode() {
+        User target = user(2L, "membre@assrone.ch", "USER");
+        when(repository.findById(2L)).thenReturn(Optional.of(target));
+        when(repository.updateRole(2L, "ADMIN")).thenReturn(1);
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.changeRole("admin@assrone.ch", 2L, UserRole.ADMIN);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=ROLE_CHANGE")
+                    .contains("result=SUCCESS")
+                    .contains("targetId=2")
+                    .contains("reasonCode=ADMIN")
+                    .doesNotContain("admin@assrone.ch");
+        }
+    }
+
+    @Test
+    void autoModificationDeRoleJournaliseAdminActionDenied() {
+        User target = user(1L, "admin@assrone.ch", "ADMIN");
+        when(repository.findById(1L)).thenReturn(Optional.of(target));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            assertThatThrownBy(() -> service.changeRole("admin@assrone.ch", 1L, UserRole.USER))
+                    .isInstanceOf(SelfActionForbiddenException.class);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=ADMIN_ACTION_DENIED")
+                    .contains("result=DENIED")
+                    .contains("reasonCode=ROLE_CHANGE:SELF_ACTION_FORBIDDEN");
+        }
+    }
+
+    @Test
+    void retrogradationDuDernierAdministrateurJournaliseAdminActionDenied() {
+        User target = user(2L, "admin2@assrone.ch", "ADMIN");
+        when(repository.findById(2L)).thenReturn(Optional.of(target));
+        when(repository.countByRole("ADMIN")).thenReturn(1L);
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            assertThatThrownBy(() -> service.changeRole("admin1@assrone.ch", 2L, UserRole.USER))
+                    .isInstanceOf(LastAdministratorException.class);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=ADMIN_ACTION_DENIED")
+                    .contains("reasonCode=ROLE_CHANGE:LAST_ADMINISTRATOR_PROTECTED");
+        }
+    }
+
+    @Test
+    void suppressionReussieJournaliseUserDeleted() {
+        User target = user(2L, "membre@assrone.ch", "USER");
+        when(repository.findById(2L)).thenReturn(Optional.of(target));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.deleteUser("admin@assrone.ch", 2L);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=USER_DELETED")
+                    .contains("result=SUCCESS")
+                    .contains("targetId=2");
+        }
+    }
+
+    @Test
+    void suppressionSurUtilisateurInexistantJournaliseAdminActionDenied() {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            assertThatThrownBy(() -> service.deleteUser("admin@assrone.ch", 99L))
+                    .isInstanceOf(UserNotFoundException.class);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=ADMIN_ACTION_DENIED")
+                    .contains("reasonCode=USER_DELETED:TARGET_NOT_FOUND");
+        }
     }
 }

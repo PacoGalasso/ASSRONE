@@ -1,11 +1,14 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.exception.UserAlreadyExistsException;
 import ASSRONE.backend.exception.UsernameAlreadyExistsException;
 import ASSRONE.backend.mapper.UserMapper;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.UserInfoRepository;
+import ASSRONE.backend.security.ClientIpResolver;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 
@@ -39,11 +43,14 @@ class UserInfoServiceTest {
     @Mock
     private UserMapper userMapper;
 
+    private SecurityAuditService securityAuditService;
+
     private UserInfoService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserInfoService(repository, encoder, userMapper, Clock.systemDefaultZone());
+        securityAuditService = new SecurityAuditService(new ClientIpResolver(""));
+        service = new UserInfoService(repository, encoder, userMapper, Clock.systemDefaultZone(), securityAuditService);
     }
 
     private RegisterRequest validRequest() {
@@ -145,5 +152,125 @@ class UserInfoServiceTest {
         assertThat(saved.getId()).isNull();
         assertThat(saved.getRole()).isEqualTo("USER");
         assertThat(saved.getIsActive()).isTrue();
+    }
+
+    // ===== Journalisation d'audit (USER_CREATED) =====
+
+    private static User savedUserWithId(Long id) {
+        return User.builder()
+                .id(id)
+                .username("jdupont")
+                .email("jean.dupont@assrone.ch")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .password("motdepasse-hache")
+                .role("USER")
+                .isActive(true)
+                .build();
+    }
+
+    @Test
+    void creationReussieJournaliseExactementUnEvenementUserCreated() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("motdepasse-hache");
+        when(repository.save(any())).thenReturn(savedUserWithId(42L));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.addUser(validRequest());
+
+            assertThat(capture.messages()).hasSize(1);
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=USER_CREATED")
+                    .contains("result=SUCCESS")
+                    .contains("reasonCode=SELF_REGISTRATION");
+        }
+    }
+
+    @Test
+    void ligneUserCreatedReferenceLIdentifiantInterneDeLUtilisateurCree() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("motdepasse-hache");
+        when(repository.save(any())).thenReturn(savedUserWithId(42L));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.addUser(validRequest());
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("actorId=42").contains("targetType=user").contains("targetId=42");
+        }
+    }
+
+    @Test
+    void ligneUserCreatedNeContientJamaisLeMotDePasse() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("motdepasse-hache-tres-secrete");
+        when(repository.save(any())).thenReturn(savedUserWithId(42L));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.addUser(validRequest());
+
+            String line = capture.messages().get(0);
+            assertThat(line).doesNotContain("motdepasse-hache-tres-secrete")
+                    .doesNotContain("motdepasse123");
+        }
+    }
+
+    @Test
+    void ligneUserCreatedNeSerialisePasLeDtoUtilisateurComplet() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("motdepasse-hache");
+        when(repository.save(any())).thenReturn(savedUserWithId(42L));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.addUser(validRequest());
+
+            String line = capture.messages().get(0);
+            assertThat(line).doesNotContain("jean.dupont@assrone.ch")
+                    .doesNotContain("Jean")
+                    .doesNotContain("Dupont");
+        }
+    }
+
+    @Test
+    void aucunEvenementJournaliseQuandLEmailExisteDeja() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.of(new User()));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            assertThatThrownBy(() -> service.addUser(validRequest()))
+                    .isInstanceOf(UserAlreadyExistsException.class);
+
+            assertThat(capture.messages()).isEmpty();
+        }
+        verifyNoInteractions(encoder);
+    }
+
+    @Test
+    void aucunEvenementJournaliseQuandLaSauvegardeEchoueParCollisionDeNomDUtilisateur() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("hash");
+        ConstraintViolationException cause = new ConstraintViolationException(
+                "duplicate key value violates unique constraint", null, "uk_users_username");
+        when(repository.save(any())).thenThrow(new DataIntegrityViolationException("collision", cause));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            assertThatThrownBy(() -> service.addUser(validRequest()))
+                    .isInstanceOf(UsernameAlreadyExistsException.class);
+
+            assertThat(capture.messages()).isEmpty();
+        }
+    }
+
+    @Test
+    void aucunEvenementJournaliseQuandLaSauvegardeEchouePourUneAutreRaison() {
+        when(repository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("hash");
+        when(repository.save(any())).thenThrow(new DataIntegrityViolationException("collision sans cause connue"));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            assertThatThrownBy(() -> service.addUser(validRequest()))
+                    .isInstanceOf(UserAlreadyExistsException.class);
+
+            assertThat(capture.messages()).isEmpty();
+        }
     }
 }

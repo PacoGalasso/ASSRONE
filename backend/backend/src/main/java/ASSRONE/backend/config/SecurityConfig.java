@@ -1,6 +1,7 @@
 package ASSRONE.backend.config;
 
 import ASSRONE.backend.filter.AuthCookieOriginFilter;
+import ASSRONE.backend.filter.CorrelationIdFilter;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.security.ContentSecurityPolicy;
@@ -47,13 +48,16 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final RateLimitFilter rateLimitFilter;
     private final AuthCookieOriginFilter authCookieOriginFilter;
+    private final CorrelationIdFilter correlationIdFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter, RateLimitFilter rateLimitFilter,
-                           AuthCookieOriginFilter authCookieOriginFilter, JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint) {
+                           AuthCookieOriginFilter authCookieOriginFilter, CorrelationIdFilter correlationIdFilter,
+                           JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.rateLimitFilter = rateLimitFilter;
         this.authCookieOriginFilter = authCookieOriginFilter;
+        this.correlationIdFilter = correlationIdFilter;
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
     }
 
@@ -134,6 +138,16 @@ public class SecurityConfig {
                 // confirmed by a failing test before this line was added. SecurityContextHolderFilter
                 // itself still runs before HeaderWriterFilter in Spring Security's own default
                 // ordering, so JwtAuthFilter — last in this chain — still runs after it too.
+                // CorrelationIdFilter runs before everything else in this custom chain
+                // (even HeaderWriterFilter): it sets its response header and populates
+                // MDC directly and immediately, not through HeaderWriterFilter's lazy-
+                // write wrapper, so its own ordering constraint is simpler — it just
+                // needs to run before any filter that might short-circuit with a direct
+                // response write (AuthCookieOriginFilter's 403, RateLimitFilter's 429),
+                // so those rejections still carry a correlation ID and so any
+                // SecurityAuditService call made while handling this request already has
+                // one in MDC.
+                .addFilterBefore(correlationIdFilter, HeaderWriterFilter.class)
                 .addFilterAfter(authCookieOriginFilter, HeaderWriterFilter.class)
                 .addFilterAfter(rateLimitFilter, AuthCookieOriginFilter.class)
                 .addFilterAfter(jwtAuthFilter, RateLimitFilter.class);
@@ -184,6 +198,14 @@ public class SecurityConfig {
     @Bean
     public FilterRegistrationBean<AuthCookieOriginFilter> authCookieOriginFilterRegistration(AuthCookieOriginFilter authCookieOriginFilter) {
         FilterRegistrationBean<AuthCookieOriginFilter> registration = new FilterRegistrationBean<>(authCookieOriginFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    // Same double-registration issue as the other filters above.
+    @Bean
+    public FilterRegistrationBean<CorrelationIdFilter> correlationIdFilterRegistration(CorrelationIdFilter correlationIdFilter) {
+        FilterRegistrationBean<CorrelationIdFilter> registration = new FilterRegistrationBean<>(correlationIdFilter);
         registration.setEnabled(false);
         return registration;
     }

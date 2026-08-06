@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.dto.CreateEventRequest;
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.EventRegistrationRequest;
 import ASSRONE.backend.dto.UpdateEventRequest;
@@ -13,6 +16,7 @@ import ASSRONE.backend.model.Event;
 import ASSRONE.backend.model.EventRegistration;
 import ASSRONE.backend.repository.EventRegistrationRepository;
 import ASSRONE.backend.repository.EventRepository;
+import ASSRONE.backend.security.ClientIpResolver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -55,7 +59,8 @@ class EventServiceTest {
     private ApplicationEventPublisher eventPublisher;
 
     private EventService service() {
-        return new EventService(eventRepository, eventRegistrationRepository, eventMapper, eventPublisher);
+        return new EventService(eventRepository, eventRegistrationRepository, eventMapper, eventPublisher,
+                new SecurityAuditService(new ClientIpResolver("")));
     }
 
     private static Event evenementOuvert(int currentParticipants) {
@@ -408,5 +413,58 @@ class EventServiceTest {
 
         verify(eventRepository).updateMaxParticipantsIfSufficientCapacity(1L, 5);
         verify(eventRepository).save(refresh);
+    }
+
+    // ===== Journalisation d'audit =====
+
+    @Test
+    void creationReussieJournaliseEventCreated() {
+        Event saved = evenementOuvert(0);
+        saved.setId(7L);
+        saved.setType("Atelier");
+        when(eventMapper.fromCreateRequest(any())).thenReturn(saved);
+        when(eventRepository.save(saved)).thenReturn(saved);
+        when(eventMapper.toDto(saved)).thenReturn(EventDto.builder().id(7L).build());
+        CreateEventRequest request = CreateEventRequest.builder()
+                .title("Atelier").description("Description").type("Atelier")
+                .eventDate(LocalDate.now().plusDays(1)).startTime(LocalTime.of(18, 0)).endTime(LocalTime.of(20, 0))
+                .location("Local associatif").maxParticipants(10).build();
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service().createEvent(request);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=EVENT_CREATED").contains("result=SUCCESS").contains("targetId=7");
+        }
+    }
+
+    @Test
+    void modificationReussieJournaliseEventUpdated() {
+        Event avant = evenementOuvert(3);
+        Event refresh = evenementOuvert(3);
+        refresh.setType("Atelier");
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(avant), Optional.of(refresh));
+        when(eventRepository.updateMaxParticipantsIfSufficientCapacity(1L, 15)).thenReturn(1);
+        when(eventRepository.save(refresh)).thenReturn(refresh);
+        when(eventMapper.toDto(refresh)).thenReturn(EventDto.builder().id(1L).build());
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service().updateEvent(1L, updateRequest("Atelier", 15));
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=EVENT_UPDATED").contains("result=SUCCESS");
+        }
+    }
+
+    @Test
+    void suppressionReussieJournaliseEventDeleted() {
+        when(eventRepository.existsById(2L)).thenReturn(true);
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service().deleteEvent(2L);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=EVENT_DELETED").contains("result=SUCCESS").contains("targetId=2");
+        }
     }
 }

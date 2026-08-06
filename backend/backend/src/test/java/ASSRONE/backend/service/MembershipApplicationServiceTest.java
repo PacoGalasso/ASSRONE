@@ -1,5 +1,7 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.dto.CreateMembershipApplicationRequest;
 import ASSRONE.backend.dto.MembershipApplicationDto;
 import ASSRONE.backend.event.MembershipApplicationAcceptedEvent;
@@ -15,6 +17,7 @@ import ASSRONE.backend.model.MembershipType;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.MembershipApplicationRepository;
 import ASSRONE.backend.repository.UserInfoRepository;
+import ASSRONE.backend.security.ClientIpResolver;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,7 +59,8 @@ class MembershipApplicationServiceTest {
 
     private MembershipApplicationService service() {
         return new MembershipApplicationService(
-                repository, mapper, userInfoRepository, passwordEncoder, eventPublisher);
+                repository, mapper, userInfoRepository, passwordEncoder, eventPublisher,
+                new SecurityAuditService(new ClientIpResolver("")));
     }
 
     private static CreateMembershipApplicationRequest requeteValide(String email) {
@@ -378,5 +382,47 @@ class MembershipApplicationServiceTest {
 
         assertThat(application.getStatus()).isEqualTo(ApplicationStatus.REJECTED);
         assertThat(result.getStatus()).isEqualTo(ApplicationStatus.REJECTED);
+    }
+
+    // ===== Journalisation d'audit =====
+
+    @Test
+    void acceptationReussieJournaliseMembershipAcceptedSansExposerLeMotDePasseGenere() {
+        MembershipApplication application = candidaturePending(1L, "jean.dupont@assrone.ch");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(userInfoRepository.findByEmail("jean.dupont@assrone.ch")).thenReturn(Optional.empty());
+        when(userInfoRepository.existsByUsername("jean.dupont")).thenReturn(false);
+        when(passwordEncoder.encode(any())).thenReturn("mot-de-passe-hache");
+        when(repository.save(application)).thenReturn(application);
+        when(mapper.toDto(application)).thenReturn(
+                MembershipApplicationDto.builder().email("jean.dupont@assrone.ch").status(ApplicationStatus.APPROVED).build());
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service().accept(1L);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=MEMBERSHIP_ACCEPTED")
+                    .contains("result=SUCCESS")
+                    .contains("targetId=1")
+                    .doesNotContain("mot-de-passe-hache");
+        }
+    }
+
+    @Test
+    void rejetReussiJournaliseMembershipRejected() {
+        MembershipApplication application = candidaturePending(1L, "jean.dupont@assrone.ch");
+        when(repository.findById(1L)).thenReturn(Optional.of(application));
+        when(repository.save(application)).thenReturn(application);
+        when(mapper.toDto(application)).thenReturn(
+                MembershipApplicationDto.builder().email("jean.dupont@assrone.ch").status(ApplicationStatus.REJECTED).build());
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service().reject(1L);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=MEMBERSHIP_REJECTED")
+                    .contains("result=SUCCESS")
+                    .contains("targetId=1");
+        }
     }
 }
