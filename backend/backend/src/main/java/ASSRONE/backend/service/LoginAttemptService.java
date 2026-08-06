@@ -44,4 +44,23 @@ public class LoginAttemptService {
         }
         repository.resetFailedLoginAttempts(normalizedEmail);
     }
+
+    /**
+     * Read-only check used only to decide, after a failed attempt has already
+     * been registered, whether that specific attempt was the one that crossed
+     * the lockout threshold — so the caller can log a distinct ACCOUNT_LOCKED
+     * audit event instead of a plain LOGIN_FAILURE. Never used to gate
+     * authentication itself; that remains entirely UserInfoDetails/Spring
+     * Security's job.
+     */
+    @Transactional(readOnly = true)
+    public boolean isCurrentlyLocked(String normalizedEmail) {
+        if (normalizedEmail == null) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        return repository.findByEmail(normalizedEmail)
+                .map(user -> user.getLockedUntil() != null && user.getLockedUntil().isAfter(now))
+                .orElse(false);
+    }
 }

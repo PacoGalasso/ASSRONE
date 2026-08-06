@@ -1,9 +1,11 @@
 package ASSRONE.backend.controller;
 
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.config.JwtAuthenticationEntryPoint;
 import ASSRONE.backend.config.RateLimitConfig;
 import ASSRONE.backend.config.SecurityConfig;
 import ASSRONE.backend.filter.AuthCookieOriginFilter;
+import ASSRONE.backend.filter.CorrelationIdFilter;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.ratelimit.RateLimiterService;
@@ -49,7 +51,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         ClientIpResolver.class,
         RefreshCookieFactory.class,
         AuthCookieOriginFilter.class,
-        OriginValidator.class
+        OriginValidator.class,
+        CorrelationIdFilter.class,
+        SecurityAuditService.class
 })
 class AuthEndpointsSecurityHeadersTest {
 
@@ -89,7 +93,7 @@ class AuthEndpointsSecurityHeadersTest {
     void refreshReussiConserveLaValidationDOrigineEtLesHeadersDeSecurite() throws Exception {
         when(refreshTokenService.rotate("un-refresh-token")).thenReturn(
                 new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token",
-                        "ROLE_USER", "membre@assrone.ch", Duration.ofDays(7)));
+                        "ROLE_USER", "membre@assrone.ch", Duration.ofDays(7), 1L));
 
         MvcResult result = mockMvc.perform(post("/auth/refresh")
                         .header("Origin", ALLOWED_ORIGIN)

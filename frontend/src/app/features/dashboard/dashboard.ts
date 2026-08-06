@@ -29,23 +29,19 @@ export class Dashboard implements OnInit {
 
   // USER actions
   uploadFile(): void {
-    console.log('Upload file...');
     alert('Fonctionnalité "Déposer fichiers" - À implémenter');
   }
 
   createEvent(): void {
-    console.log('Create event...');
     alert('Fonctionnalité "Ajouter événement" - À implémenter');
   }
 
   // ADMIN actions
   addUser(): void {
-    console.log('Add user...');
     alert('Fonctionnalité "Ajouter utilisateur" - À implémenter');
   }
 
   manageUsers(): void {
-    console.log('Manage users...');
     alert('Fonctionnalité "Gérer utilisateurs" - À implémenter');
   }
 }

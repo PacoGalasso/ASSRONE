@@ -1,5 +1,7 @@
 package ASSRONE.backend.filter;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.ratelimit.RateLimitCategory;
 import ASSRONE.backend.ratelimit.RateLimiterService;
 import ASSRONE.backend.security.ClientIpResolver;
@@ -33,7 +35,8 @@ class RateLimitFilterTest {
     private FilterChain filterChain;
 
     private RateLimitFilter filter() {
-        return new RateLimitFilter(rateLimiterService, new ClientIpResolver(""));
+        ClientIpResolver clientIpResolver = new ClientIpResolver("");
+        return new RateLimitFilter(rateLimiterService, clientIpResolver, new SecurityAuditService(clientIpResolver));
     }
 
     @Test
@@ -105,5 +108,25 @@ class RateLimitFilterTest {
         assertThat(response.getContentAsString())
                 .isEqualTo("{\"error\":\"Trop de requêtes. Veuillez réessayer plus tard.\"}");
         assertThat(response.getHeader("Retry-After")).isEqualTo("30");
+    }
+
+    @Test
+    void requeteBloqueeJournaliseRateLimitExceededAvecLaCategorie() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/generateToken");
+        request.setRemoteAddr("10.1.0.6");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        long thirtySecondsInNanos = Duration.ofSeconds(30).toNanos();
+        when(rateLimiterService.tryConsume(eq("10.1.0.6"), eq(RateLimitCategory.LOGIN)))
+                .thenReturn(ConsumptionProbe.rejected(0, thirtySecondsInNanos, thirtySecondsInNanos));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            filter().doFilter(request, response, filterChain);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=RATE_LIMIT_EXCEEDED")
+                    .contains("result=DENIED")
+                    .contains("targetId=LOGIN")
+                    .contains("clientIp=10.1.0.6");
+        }
     }
 }

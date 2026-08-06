@@ -1,7 +1,10 @@
 package ASSRONE.backend.filter;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.controller.UserController;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
+import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.security.OriginValidator;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.LoginAttemptService;
@@ -53,10 +56,13 @@ class AuthCookieOriginFilterIntegrationTest {
         refreshTokenService = mock(RefreshTokenService.class);
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory(REFRESH_COOKIE_NAME, false, "Lax", "/auth");
+        ClientIpResolver clientIpResolver = new ClientIpResolver("");
+        SecurityAuditService securityAuditService = new SecurityAuditService(clientIpResolver);
         UserController userController = new UserController(
-                userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory);
+                userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory,
+                securityAuditService);
 
-        filter = new AuthCookieOriginFilter(new OriginValidator(ALLOWED_ORIGINS));
+        filter = new AuthCookieOriginFilter(new OriginValidator(ALLOWED_ORIGINS), securityAuditService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(userController)
                 .addFilters(filter)
@@ -67,7 +73,7 @@ class AuthCookieOriginFilterIntegrationTest {
     private void stubSuccessfulRotation() {
         when(refreshTokenService.rotate("un-refresh-token")).thenReturn(
                 new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token",
-                        "ROLE_USER", "membre@assrone.ch", Duration.ofDays(7)));
+                        "ROLE_USER", "membre@assrone.ch", Duration.ofDays(7), 1L));
     }
 
     @Test
@@ -88,6 +94,22 @@ class AuthCookieOriginFilterIntegrationTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void refreshAvecOrigineEtrangereJournaliseOriginRejected() throws Exception {
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            mockMvc.perform(post("/auth/refresh")
+                            .header("Origin", "https://evil.com")
+                            .cookie(new Cookie(REFRESH_COOKIE_NAME, "un-refresh-token")))
+                    .andExpect(status().isForbidden());
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=ORIGIN_REJECTED")
+                    .contains("result=DENIED")
+                    .contains("requestPath=/auth/refresh")
+                    .doesNotContain("un-refresh-token");
+        }
     }
 
     @Test
@@ -204,7 +226,7 @@ class AuthCookieOriginFilterIntegrationTest {
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
         when(refreshTokenService.issueTokens(any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
-                        Duration.ofDays(7)));
+                        Duration.ofDays(7), 1L));
 
         mockMvc.perform(post("/auth/generateToken")
                         .header("Origin", "https://evil.com")

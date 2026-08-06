@@ -1,5 +1,8 @@
 package ASSRONE.backend.controller;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.exception.InvalidCredentialsException;
@@ -18,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +40,7 @@ public class UserController {
     private final AuthenticationManager authenticationManager;
     private final LoginAttemptService loginAttemptService;
     private final RefreshCookieFactory refreshCookieFactory;
+    private final SecurityAuditService securityAuditService;
 
     @GetMapping("/welcome")
     public String welcome() {
@@ -58,7 +64,7 @@ public class UserController {
                     new UsernamePasswordAuthenticationToken(normalizedEmail, authRequest.getPassword())
             );
         } catch (AuthenticationException ex) {
-            loginAttemptService.registerFailedAttempt(normalizedEmail);
+            recordFailedLogin(normalizedEmail, ex);
             throw new InvalidCredentialsException("Email ou mot de passe incorrect.");
         }
 
@@ -66,7 +72,32 @@ public class UserController {
         RefreshTokenService.IssuedTokens tokens = refreshTokenService.issueTokens(normalizedEmail);
         setRefreshCookie(response, tokens);
 
+        securityAuditService.record(SecurityEventType.LOGIN_SUCCESS, SecurityEventResult.SUCCESS,
+                String.valueOf(tokens.userId()), tokens.role(), "user", String.valueOf(tokens.userId()), null);
         return new AuthResponse(tokens.accessToken(), tokens.email(), tokens.role());
+    }
+
+    private void recordFailedLogin(String normalizedEmail, AuthenticationException ex) {
+        String maskedEmail = SecurityAuditService.maskEmail(normalizedEmail);
+        if (ex instanceof LockedException) {
+            securityAuditService.record(SecurityEventType.LOGIN_FAILURE, SecurityEventResult.DENIED,
+                    maskedEmail, null, "user", null, "ACCOUNT_LOCKED");
+            return;
+        }
+        if (ex instanceof DisabledException) {
+            securityAuditService.record(SecurityEventType.LOGIN_FAILURE, SecurityEventResult.DENIED,
+                    maskedEmail, null, "user", null, "ACCOUNT_DISABLED");
+            return;
+        }
+
+        loginAttemptService.registerFailedAttempt(normalizedEmail);
+        if (loginAttemptService.isCurrentlyLocked(normalizedEmail)) {
+            securityAuditService.record(SecurityEventType.ACCOUNT_LOCKED, SecurityEventResult.DENIED,
+                    maskedEmail, null, "user", null, "THRESHOLD_REACHED");
+        } else {
+            securityAuditService.record(SecurityEventType.LOGIN_FAILURE, SecurityEventResult.DENIED,
+                    maskedEmail, null, "user", null, "BAD_CREDENTIALS");
+        }
     }
 
     // The refresh token is read from the HttpOnly cookie set at login/refresh

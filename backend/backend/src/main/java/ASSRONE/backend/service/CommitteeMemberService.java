@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.CommitteeMemberDto;
 import ASSRONE.backend.dto.CreateCommitteeMemberRequest;
 import ASSRONE.backend.dto.UpdateCommitteeMemberRequest;
@@ -14,6 +17,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -33,6 +37,7 @@ public class CommitteeMemberService {
     private final CommitteeMemberRepository committeeMemberRepository;
     private final CommitteeMemberMapper committeeMemberMapper;
     private final AvatarImageInspector avatarImageInspector;
+    private final SecurityAuditService securityAuditService;
 
     @Value("${app.upload-dir}")
     private String uploadDir;
@@ -55,6 +60,7 @@ public class CommitteeMemberService {
         CommitteeMember member = committeeMemberMapper.fromCreateRequest(request);
         trim(member);
         CommitteeMember saved = committeeMemberRepository.save(member);
+        recordAudit(SecurityEventType.COMMITTEE_MEMBER_CREATED, saved.getId());
         return committeeMemberMapper.toDto(saved);
     }
 
@@ -63,6 +69,7 @@ public class CommitteeMemberService {
         committeeMemberMapper.updateEntityFromRequest(request, member);
         trim(member);
         CommitteeMember saved = committeeMemberRepository.save(member);
+        recordAudit(SecurityEventType.COMMITTEE_MEMBER_UPDATED, saved.getId());
         return committeeMemberMapper.toDto(saved);
     }
 
@@ -73,6 +80,7 @@ public class CommitteeMemberService {
         if (photoFilename != null) {
             deleteQuietly(photoDirectory().resolve(photoFilename));
         }
+        recordAudit(SecurityEventType.COMMITTEE_MEMBER_DELETED, id);
     }
 
     public CommitteeMemberDto uploadPhoto(Long id, MultipartFile file) throws IOException {
@@ -97,6 +105,7 @@ public class CommitteeMemberService {
             deleteQuietly(photoDirectory().resolve(previousPhotoFilename));
         }
 
+        recordAudit(SecurityEventType.COMMITTEE_MEMBER_PHOTO_CHANGED, id);
         return committeeMemberMapper.toDto(member);
     }
 
@@ -110,7 +119,15 @@ public class CommitteeMemberService {
             deleteQuietly(photoDirectory().resolve(previousPhotoFilename));
         }
 
+        recordAudit(SecurityEventType.COMMITTEE_MEMBER_PHOTO_CHANGED, id);
         return committeeMemberMapper.toDto(saved);
+    }
+
+    private void recordAudit(SecurityEventType eventType, Long targetId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String actorId = authentication != null ? SecurityAuditService.maskEmail(authentication.getName()) : "-";
+        securityAuditService.record(eventType, SecurityEventResult.SUCCESS,
+                actorId, null, "committeeMember", String.valueOf(targetId), null);
     }
 
     public Resource loadPhoto(Long id, Authentication authentication) throws MalformedURLException {

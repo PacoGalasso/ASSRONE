@@ -1,5 +1,7 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.AuditLogCapture;
+import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.dto.CommitteeMemberDto;
 import ASSRONE.backend.dto.CreateCommitteeMemberRequest;
 import ASSRONE.backend.dto.UpdateCommitteeMemberRequest;
@@ -8,6 +10,7 @@ import ASSRONE.backend.exception.ResourceNotFoundException;
 import ASSRONE.backend.mapper.CommitteeMemberMapper;
 import ASSRONE.backend.model.CommitteeMember;
 import ASSRONE.backend.repository.CommitteeMemberRepository;
+import ASSRONE.backend.security.ClientIpResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,7 +59,8 @@ class CommitteeMemberServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CommitteeMemberService(committeeMemberRepository, committeeMemberMapper, new AvatarImageInspector());
+        service = new CommitteeMemberService(committeeMemberRepository, committeeMemberMapper, new AvatarImageInspector(),
+                new SecurityAuditService(new ClientIpResolver("")));
         ReflectionTestUtils.setField(service, "uploadDir", uploadDir.toString());
     }
 
@@ -204,6 +208,56 @@ class CommitteeMemberServiceTest {
         verify(committeeMemberRepository).delete(existing);
     }
 
+    // ===== Journalisation d'audit =====
+
+    @Test
+    void creationReussieJournaliseCommitteeMemberCreated() {
+        CreateCommitteeMemberRequest request = CreateCommitteeMemberRequest.builder()
+                .firstName("Jean").lastName("Dupont").role("Trésorier").displayOrder(1).active(true).build();
+        CommitteeMember mapped = CommitteeMember.builder()
+                .id(9L).firstName("Jean").lastName("Dupont").role("Trésorier").displayOrder(1).active(true).build();
+        when(committeeMemberMapper.fromCreateRequest(request)).thenReturn(mapped);
+        when(committeeMemberRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(committeeMemberMapper.toDto(any())).thenReturn(new CommitteeMemberDto());
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.create(request);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=COMMITTEE_MEMBER_CREATED").contains("result=SUCCESS").contains("targetId=9");
+        }
+    }
+
+    @Test
+    void modificationReussieJournaliseCommitteeMemberUpdated() {
+        CommitteeMember existing = existingMember(1L, "existing-photo.jpg", true);
+        when(committeeMemberRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(committeeMemberRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(committeeMemberMapper.toDto(any())).thenReturn(new CommitteeMemberDto());
+        UpdateCommitteeMemberRequest request = UpdateCommitteeMemberRequest.builder()
+                .firstName("Jean").lastName("Dupont").role("Trésorier").displayOrder(2).active(false).build();
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.update(1L, request);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=COMMITTEE_MEMBER_UPDATED").contains("result=SUCCESS").contains("targetId=1");
+        }
+    }
+
+    @Test
+    void suppressionReussieJournaliseCommitteeMemberDeleted() {
+        CommitteeMember existing = existingMember(1L, null, true);
+        when(committeeMemberRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.delete(1L);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=COMMITTEE_MEMBER_DELETED").contains("result=SUCCESS").contains("targetId=1");
+        }
+    }
+
     // ===== Photo =====
 
     @Test
@@ -257,6 +311,24 @@ class CommitteeMemberServiceTest {
         service.uploadPhoto(1L, file);
 
         assertThat(uploadDir.resolve("committee-photos/ancienne.jpg")).doesNotExist();
+    }
+
+    @Test
+    void uploadPhotoReussiJournaliseCommitteeMemberPhotoChanged() throws IOException {
+        CommitteeMember existing = existingMember(1L, null, true);
+        when(committeeMemberRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(committeeMemberRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(committeeMemberMapper.toDto(any())).thenReturn(new CommitteeMemberDto());
+        MockMultipartFile file = new MockMultipartFile("file", "photo.png", "image/png", validPngBytes());
+
+        try (AuditLogCapture capture = new AuditLogCapture()) {
+            service.uploadPhoto(1L, file);
+
+            String line = capture.messages().get(0);
+            assertThat(line).contains("eventType=COMMITTEE_MEMBER_PHOTO_CHANGED")
+                    .contains("result=SUCCESS")
+                    .contains("targetId=1");
+        }
     }
 
     @Test

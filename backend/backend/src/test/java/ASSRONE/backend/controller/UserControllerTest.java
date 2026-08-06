@@ -1,5 +1,8 @@
 package ASSRONE.backend.controller;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
@@ -57,6 +60,7 @@ class UserControllerTest {
     private AuthenticationManager authenticationManager;
     private RefreshTokenService refreshTokenService;
     private LoginAttemptService loginAttemptService;
+    private SecurityAuditService securityAuditService;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -65,8 +69,10 @@ class UserControllerTest {
         authenticationManager = mock(AuthenticationManager.class);
         refreshTokenService = mock(RefreshTokenService.class);
         loginAttemptService = mock(LoginAttemptService.class);
+        securityAuditService = mock(SecurityAuditService.class);
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory(REFRESH_COOKIE_NAME, false, "Lax", "/auth");
-        UserController controller = new UserController(userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory);
+        UserController controller = new UserController(userInfoService, refreshTokenService, authenticationManager,
+                loginAttemptService, refreshCookieFactory, securityAuditService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler(refreshCookieFactory))
                 .build();
@@ -157,7 +163,7 @@ class UserControllerTest {
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
         when(refreshTokenService.issueTokens("membre@assrone.ch")).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
-                        Duration.ofDays(7)));
+                        Duration.ofDays(7), 1L));
 
         mockMvc.perform(post("/auth/generateToken")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -174,6 +180,79 @@ class UserControllerTest {
                 .andExpect(cookie().httpOnly(REFRESH_COOKIE_NAME, true))
                 .andExpect(cookie().secure(REFRESH_COOKIE_NAME, false))
                 .andExpect(cookie().path(REFRESH_COOKIE_NAME, "/auth"));
+    }
+
+    @Test
+    void connexionValideJournaliseLoginSuccessAvecIdInterne() throws Exception {
+        UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
+                "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+        when(refreshTokenService.issueTokens("membre@assrone.ch")).thenReturn(
+                new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
+                        Duration.ofDays(7), 1L));
+
+        mockMvc.perform(post("/auth/generateToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"membre@assrone.ch","password":"bon-mot-de-passe"}
+                        """));
+
+        verify(securityAuditService).record(SecurityEventType.LOGIN_SUCCESS, SecurityEventResult.SUCCESS,
+                "1", "ROLE_USER", "user", "1", null);
+    }
+
+    @Test
+    void echecAvecMauvaisMotDePasseJournaliseLoginFailureSansMotDePasseNiToken() throws Exception {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("Bad credentials"));
+        when(loginAttemptService.isCurrentlyLocked("membre@assrone.ch")).thenReturn(false);
+
+        mockMvc.perform(post("/auth/generateToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(LOGIN_INVALIDE));
+
+        ArgumentCaptor<String> actorIdCaptor = ArgumentCaptor.forClass(String.class);
+        verify(securityAuditService).record(eq(SecurityEventType.LOGIN_FAILURE), eq(SecurityEventResult.DENIED),
+                actorIdCaptor.capture(), eq(null), eq("user"), eq(null), eq("BAD_CREDENTIALS"));
+        assertThat(actorIdCaptor.getValue()).doesNotContain("mauvais-mot-de-passe");
+    }
+
+    @Test
+    void compteVerrouilleJournaliseLoginFailureAvecReasonCodeAccountLocked() throws Exception {
+        when(authenticationManager.authenticate(any())).thenThrow(new LockedException("Locked"));
+
+        mockMvc.perform(post("/auth/generateToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(LOGIN_INVALIDE));
+
+        verify(securityAuditService).record(eq(SecurityEventType.LOGIN_FAILURE), eq(SecurityEventResult.DENIED),
+                any(), eq(null), eq("user"), eq(null), eq("ACCOUNT_LOCKED"));
+        verifyNoInteractions(loginAttemptService);
+    }
+
+    @Test
+    void compteDesactiveJournaliseLoginFailureAvecReasonCodeAccountDisabled() throws Exception {
+        when(authenticationManager.authenticate(any())).thenThrow(new DisabledException("Disabled"));
+
+        mockMvc.perform(post("/auth/generateToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(LOGIN_INVALIDE));
+
+        verify(securityAuditService).record(eq(SecurityEventType.LOGIN_FAILURE), eq(SecurityEventResult.DENIED),
+                any(), eq(null), eq("user"), eq(null), eq("ACCOUNT_DISABLED"));
+    }
+
+    @Test
+    void echecQuiFranchitLeSeuilJournaliseAccountLockedPasLoginFailure() throws Exception {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("Bad credentials"));
+        when(loginAttemptService.isCurrentlyLocked("membre@assrone.ch")).thenReturn(true);
+
+        mockMvc.perform(post("/auth/generateToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(LOGIN_INVALIDE));
+
+        verify(securityAuditService).record(eq(SecurityEventType.ACCOUNT_LOCKED), eq(SecurityEventResult.DENIED),
+                any(), eq(null), eq("user"), eq(null), eq("THRESHOLD_REACHED"));
+        verify(securityAuditService, Mockito.never()).record(eq(SecurityEventType.LOGIN_FAILURE), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -208,7 +287,7 @@ class UserControllerTest {
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
         when(refreshTokenService.issueTokens(any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
-                        Duration.ofDays(7)));
+                        Duration.ofDays(7), 1L));
 
         mockMvc.perform(post("/auth/generateToken")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -337,7 +416,7 @@ class UserControllerTest {
     void refreshValideRetourneUnNouveauCoupleDeTokens() throws Exception {
         when(refreshTokenService.rotate("ancien-refresh-token")).thenReturn(
                 new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token", "ROLE_USER", "membre@assrone.ch",
-                        Duration.ofDays(7)));
+                        Duration.ofDays(7), 1L));
 
         mockMvc.perform(post("/auth/refresh")
                         .cookie(new Cookie(REFRESH_COOKIE_NAME, "ancien-refresh-token")))

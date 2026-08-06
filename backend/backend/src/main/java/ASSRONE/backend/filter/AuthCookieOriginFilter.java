@@ -1,5 +1,8 @@
 package ASSRONE.backend.filter;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.security.OriginValidator;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -45,6 +48,7 @@ public class AuthCookieOriginFilter extends OncePerRequestFilter {
     private static final Set<String> PROTECTED_PATHS = Set.of("/auth/refresh", "/auth/logout");
 
     private final OriginValidator originValidator;
+    private final SecurityAuditService securityAuditService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -58,6 +62,8 @@ public class AuthCookieOriginFilter extends OncePerRequestFilter {
         String referer = request.getHeader(HttpHeaders.REFERER);
 
         if (!originValidator.isAllowed(origin, referer)) {
+            securityAuditService.record(request, SecurityEventType.ORIGIN_REJECTED, SecurityEventResult.DENIED,
+                    null, null, "requestPath", request.getRequestURI(), "ORIGIN_OR_REFERER_NOT_ALLOWED");
             writeForbidden(response);
             return;
         }

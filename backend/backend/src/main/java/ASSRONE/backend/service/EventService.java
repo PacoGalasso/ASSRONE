@@ -1,6 +1,9 @@
 // service/EventService.java — remplace le fichier entier
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.CreateEventRequest;
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.EventRegistrationRequest;
@@ -18,6 +21,8 @@ import ASSRONE.backend.repository.EventRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +38,7 @@ public class EventService {
     private final EventRegistrationRepository eventRegistrationRepository;
     private final EventMapper eventMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final SecurityAuditService securityAuditService;
 
     public List<EventDto> getUpcomingEvents() {
         return eventRepository.findByEventDateGreaterThanEqualOrderByEventDateAsc(LocalDate.now())
@@ -58,6 +64,8 @@ public class EventService {
         Event event = eventMapper.fromCreateRequest(request);
         event.setType(event.getType().trim());
         Event saved = eventRepository.save(event);
+        securityAuditService.record(SecurityEventType.EVENT_CREATED, SecurityEventResult.SUCCESS,
+                currentActorId(), null, "event", String.valueOf(saved.getId()), null);
         return eventMapper.toDto(saved);
     }
 
@@ -78,6 +86,8 @@ public class EventService {
         refreshed.setType(refreshed.getType().trim());
 
         Event saved = eventRepository.save(refreshed);
+        securityAuditService.record(SecurityEventType.EVENT_UPDATED, SecurityEventResult.SUCCESS,
+                currentActorId(), null, "event", String.valueOf(saved.getId()), null);
         return eventMapper.toDto(saved);
     }
 
@@ -135,5 +145,12 @@ public class EventService {
         }
         eventRegistrationRepository.deleteByEventId(id);
         eventRepository.deleteById(id);
+        securityAuditService.record(SecurityEventType.EVENT_DELETED, SecurityEventResult.SUCCESS,
+                currentActorId(), null, "event", String.valueOf(id), null);
+    }
+
+    private static String currentActorId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null ? SecurityAuditService.maskEmail(authentication.getName()) : "-";
     }
 }

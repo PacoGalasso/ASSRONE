@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.dto.UserDto;
@@ -32,13 +35,16 @@ public class UserInfoService implements UserDetailsService {
     private final PasswordEncoder encoder;
     private final UserMapper userMapper;
     private final Clock clock;
+    private final SecurityAuditService securityAuditService;
 
     @Autowired
-    public UserInfoService(UserInfoRepository repository, PasswordEncoder encoder, UserMapper userMapper, Clock clock) {
+    public UserInfoService(UserInfoRepository repository, PasswordEncoder encoder, UserMapper userMapper, Clock clock,
+                            SecurityAuditService securityAuditService) {
         this.repository = repository;
         this.encoder = encoder;
         this.userMapper = userMapper;
         this.clock = clock;
+        this.securityAuditService = securityAuditService;
     }
 
     // Method to load user details by username (email)
@@ -91,6 +97,11 @@ public class UserInfoService implements UserDetailsService {
             }
             throw new UserAlreadyExistsException("Un compte existe déjà avec l'email " + normalizedEmail);
         }
+
+        securityAuditService.record(SecurityEventType.USER_CREATED, SecurityEventResult.SUCCESS,
+                String.valueOf(saved.getId()), "ROLE_" + saved.getRole().toUpperCase(Locale.ROOT),
+                "user", String.valueOf(saved.getId()), "SELF_REGISTRATION");
+
         return RegisterResponse.builder()
                 .id(saved.getId())
                 .username(saved.getUsername())

@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.CreateMembershipApplicationRequest;
 import ASSRONE.backend.dto.MembershipApplicationDto;
 import ASSRONE.backend.event.MembershipApplicationAcceptedEvent;
@@ -18,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +47,7 @@ public class MembershipApplicationService {
     private final UserInfoRepository userInfoRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final SecurityAuditService securityAuditService;
 
     @Transactional
     public MembershipApplicationDto submit(CreateMembershipApplicationRequest request) {
@@ -176,6 +182,8 @@ public class MembershipApplicationService {
         eventPublisher.publishEvent(new MembershipApplicationAcceptedEvent(
                 saved.getId(), saved.getFullName(), saved.getEmail(), rawPassword));
 
+        securityAuditService.record(SecurityEventType.MEMBERSHIP_ACCEPTED, SecurityEventResult.SUCCESS,
+                currentActorId(), null, "membershipApplication", String.valueOf(saved.getId()), null);
         return mapper.toDto(saved);
     }
 
@@ -184,7 +192,16 @@ public class MembershipApplicationService {
         MembershipApplication application = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Demande introuvable : " + id));
         application.setStatus(ApplicationStatus.REJECTED);
-        return mapper.toDto(repository.save(application));
+        MembershipApplication saved = repository.save(application);
+
+        securityAuditService.record(SecurityEventType.MEMBERSHIP_REJECTED, SecurityEventResult.SUCCESS,
+                currentActorId(), null, "membershipApplication", String.valueOf(saved.getId()), null);
+        return mapper.toDto(saved);
+    }
+
+    private static String currentActorId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null ? SecurityAuditService.maskEmail(authentication.getName()) : "-";
     }
 
     private String generateRandomPassword() {
