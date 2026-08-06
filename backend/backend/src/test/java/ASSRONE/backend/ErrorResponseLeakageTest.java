@@ -39,6 +39,7 @@ import static org.mockito.Mockito.when;
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
+        "spring.jpa.hibernate.ddl-auto=update",
         "spring.flyway.locations=classpath:db/no-migrations-for-context-loads-test",
         "spring.flyway.fail-on-missing-locations=false",
         "app.jwt.secret=zTjvaDrwlDQTMdHQ9vSfqXGwdkGSXJtT09uCOP+KLfO0RmyO617AZi/hK7VKCiKe",

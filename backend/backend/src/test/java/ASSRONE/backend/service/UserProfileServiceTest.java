@@ -16,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.Resource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -396,5 +397,49 @@ class UserProfileServiceTest {
 
         assertThat(user.getEmail()).isEqualTo("membre@assrone.ch");
         assertThat(user.getPassword()).isEqualTo("mot-de-passe-actuel-hache");
+    }
+
+    // ===== Chargement de l'avatar =====
+
+    @Test
+    void loadAvatarRetourneNullQuandAucunAvatarEnBase() throws IOException {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+
+        assertThat(service.loadAvatar("membre@assrone.ch")).isNull();
+    }
+
+    @Test
+    void loadAvatarRetourneLaRessourceQuandLeFichierExisteReellement() throws IOException {
+        User user = existingUser();
+        user.setAvatarFilename("avatar-existant.jpg");
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        Files.createDirectories(avatarsDir());
+        Files.write(avatarsDir().resolve("avatar-existant.jpg"), fixture("small-valid.jpg"));
+
+        Resource resource = service.loadAvatar("membre@assrone.ch");
+
+        assertThat(resource).isNotNull();
+        assertThat(resource.exists()).isTrue();
+    }
+
+    // Reproduces the bug report exactly: a user record still references an
+    // avatar file (e.g. "31f169dd-....jpg") that no longer exists on disk.
+    // Before this fix, loadAvatar returned a UrlResource pointing at nothing,
+    // and ProfileController#getAvatar would only fail later — during response
+    // serialization, past any @ExceptionHandler — with an uncaught
+    // FileNotFoundException that this project's filter chain turns into a
+    // 401, which the frontend's JwtInterceptor then treats as an
+    // authentication failure and can log the user out over. Returning null
+    // here instead routes this case through the exact same, already-correct
+    // 404 path as "no avatar filename at all" (see ProfileController#getAvatar).
+    @Test
+    void loadAvatarRetourneNullQuandLaReferenceEnBasePointeVersUnFichierAbsentDuDisque() throws IOException {
+        User user = existingUser();
+        user.setAvatarFilename("31f169dd-2078-4a69-9f78-b2afb7d24732.jpg");
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        // Deliberately no file written at avatarsDir() — this is the whole point.
+
+        assertThat(service.loadAvatar("membre@assrone.ch")).isNull();
     }
 }

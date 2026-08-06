@@ -23,11 +23,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * the referenced user cascades to its refresh tokens.
  *
  * Baselined at version 4 so only V5 is exercised, mirroring the sibling
- * migration tests. V5's FK targets "users", a table Flyway itself never
- * creates (it is created by Hibernate ddl-auto before Flyway runs — see
- * FlywayStartupMigrator); a minimal users table is created manually here,
- * both to make the schema non-empty for baselineOnMigrate and to give the
- * FK a real target to reference.
+ * migration tests. This test builds its own isolated Flyway instance via
+ * Flyway.configure() rather than booting the Spring context, so
+ * LegacyBaselineFlywayCallback (a Spring-managed bean, only wired in by
+ * Spring Boot's FlywayAutoConfiguration) never runs here; a minimal users
+ * table — V5's FK target — is created manually instead, both to make the
+ * schema non-empty for baselineOnMigrate and to give the FK a real target
+ * to reference.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class FlywayRefreshTokensMigrationTest {

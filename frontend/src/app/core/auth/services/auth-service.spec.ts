@@ -240,6 +240,43 @@ describe('AuthService', () => {
     });
   });
 
+  describe('endLocalSession', () => {
+    it('should clear in-memory state, redirect home and never call the backend', () => {
+      // #given
+      service.login({email: 'membre@assrone.ch', password: 'motdepasse123'}).subscribe();
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
+      const navigateSpy = vi.spyOn(router, 'navigate');
+
+      // #when
+      service.endLocalSession();
+
+      // #then
+      expect(service.getToken()).toBeNull();
+      expect(service.user()).toBeNull();
+      expect(navigateSpy).toHaveBeenCalledWith(['/']);
+    });
+
+    it('should broadcast logout to other tabs without including a token value', async () => {
+      // #given
+      service.login({email: 'membre@assrone.ch', password: 'motdepasse123'}).subscribe();
+      httpMock.expectOne('/auth/generateToken').flush(authResponse);
+      const receiverChannel = new BroadcastChannel('assrone-auth');
+      const received: unknown[] = [];
+      receiverChannel.onmessage = (event) => received.push(event.data);
+
+      try {
+        // #when
+        service.endLocalSession();
+
+        // #then
+        await vi.waitFor(() => expect(received).toEqual(['logout']));
+        expect(JSON.stringify(received)).not.toContain('access-token');
+      } finally {
+        receiverChannel.close();
+      }
+    });
+  });
+
   describe('isAdmin', () => {
     it('should return true only when the in-memory role is ROLE_ADMIN', () => {
       // #given

@@ -1,0 +1,64 @@
+<section>
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 pb-3 border-b border-[#E3E1DC]">
+    <h2 class="font-semibold text-[#122347]">Sessions actives</h2>
+    @if (sessions().length > 1) {
+      <div class="flex flex-wrap gap-3">
+        <button type="button" (click)="onRevokeOthers()" [disabled]="revokingOthers() || revokingAll()"
+                class="text-sm font-medium text-[#AD7A26] hover:text-[#122347] transition-colors disabled:opacity-50">
+          {{ revokingOthers() ? 'Déconnexion...' : 'Déconnecter les autres sessions' }}
+        </button>
+        <button type="button" (click)="onRevokeAll()" [disabled]="revokingOthers() || revokingAll()"
+                class="text-sm font-medium text-red-700 hover:text-red-900 transition-colors disabled:opacity-50">
+          {{ revokingAll() ? 'Déconnexion...' : 'Déconnecter tous les appareils' }}
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (loading()) {
+    <p class="text-[#5C5F66]">Chargement des sessions...</p>
+  } @else if (loadError()) {
+    <p class="text-sm text-red-600">{{ loadError() }}</p>
+  } @else if (sessions().length === 0) {
+    <p class="text-[#5C5F66]">Aucune session active.</p>
+  } @else {
+    @if (actionError()) {
+      <p class="text-sm text-red-600 mb-4">{{ actionError() }}</p>
+    }
+    @if (actionMessage()) {
+      <p class="text-sm text-green-700 mb-4">{{ actionMessage() }}</p>
+    }
+
+    <ul class="flex flex-col gap-4">
+      @for (session of sessions(); track session.id) {
+        <li class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-[#E3E1DC] rounded-md px-4 py-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-[#122347] truncate">{{ session.device ?? 'Appareil inconnu' }}</span>
+              @if (session.current) {
+                <span class="shrink-0 text-xs font-semibold text-white bg-[#122347] rounded-full px-2 py-0.5">
+                  Session actuelle
+                </span>
+              }
+            </div>
+            <p class="text-sm text-[#5C5F66] mt-1">
+              Dernière activité le {{ session.lastUsedAt | date:'d MMMM yyyy à HH:mm' }}
+              @if (session.ipAddress) {
+                &middot; {{ session.ipAddress }}
+              }
+            </p>
+            <p class="text-xs text-[#8A8D94] mt-0.5">
+              Expire le {{ session.expiresAt | date:'d MMMM yyyy' }}
+            </p>
+          </div>
+
+          <button type="button" (click)="onRevoke(session)" [disabled]="revokingId() === session.id"
+                  [attr.aria-label]="'Déconnecter la session : ' + (session.device ?? 'appareil inconnu')"
+                  class="shrink-0 self-start sm:self-center text-sm font-medium text-red-700 hover:text-red-900 transition-colors disabled:opacity-50">
+            {{ revokingId() === session.id ? 'Déconnexion...' : 'Déconnecter' }}
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</section>

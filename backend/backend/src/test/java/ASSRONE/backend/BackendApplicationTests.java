@@ -14,16 +14,18 @@ import org.springframework.boot.test.context.SpringBootTest;
  * against real Postgres by their own dedicated Testcontainers tests
  * (FlywayMembershipApplicationMigrationTest, FlywayEventsTypeCheckMigrationTest,
  * FlywayDocumentsVisibilityMigrationTest, FlywayCommitteeMembersMigrationTest).
- * Rather than disabling Flyway outright (spring.flyway.enabled=false, which
- * removes the Flyway bean and breaks FlywayStartupMigrator's constructor
- * injection), spring.flyway.locations is pointed at a classpath folder that
- * doesn't exist: the Flyway bean still exists and FlywayStartupMigrator still
- * runs on ApplicationReadyEvent exactly as in production, it just finds zero
- * migrations to apply, so no Postgres-specific SQL is ever executed. With no
- * migrations to run, Hibernate's own ddl-auto=update becomes the sole schema
- * owner for this context, which is generic enough to run against the
- * in-memory H2 database used here — so this test needs neither Docker nor a
- * real Postgres instance, anywhere, ever.
+ * spring.flyway.locations is pointed at a classpath folder that doesn't
+ * exist: the Flyway bean still exists (and LegacyBaselineFlywayCallback still
+ * fires on it, harmlessly, since it only issues CREATE TABLE IF NOT EXISTS),
+ * but with zero real migrations to apply, no Postgres-specific SQL is ever
+ * executed. The real application never lets Hibernate own the schema
+ * (ddl-auto=validate everywhere, see application.properties), but with no
+ * migrations run here there is nothing for Hibernate to validate against —
+ * so this test class explicitly overrides ddl-auto back to "update" for
+ * itself only, letting Hibernate build the full H2 schema directly. This is
+ * exactly the kind of isolated, test-local override the real application's
+ * architecture does not otherwise allow: it needs neither Docker nor a real
+ * Postgres instance, anywhere, ever.
  *
  * All values below are dummy/test-only and scoped to this single test class
  * via @SpringBootTest(properties = ...) — they never apply to any other test
@@ -37,6 +39,7 @@ import org.springframework.boot.test.context.SpringBootTest;
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
+        "spring.jpa.hibernate.ddl-auto=update",
         "spring.flyway.locations=classpath:db/no-migrations-for-context-loads-test",
         "spring.flyway.fail-on-missing-locations=false",
         // 48 random bytes, Base64-encoded (HS384 key length required by JwtService).

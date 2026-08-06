@@ -27,6 +27,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -60,7 +61,7 @@ class AuthCookieOriginFilterIntegrationTest {
         SecurityAuditService securityAuditService = new SecurityAuditService(clientIpResolver);
         UserController userController = new UserController(
                 userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory,
-                securityAuditService);
+                securityAuditService, clientIpResolver);
 
         filter = new AuthCookieOriginFilter(new OriginValidator(ALLOWED_ORIGINS), securityAuditService);
 
@@ -71,7 +72,7 @@ class AuthCookieOriginFilterIntegrationTest {
     }
 
     private void stubSuccessfulRotation() {
-        when(refreshTokenService.rotate("un-refresh-token")).thenReturn(
+        when(refreshTokenService.rotate(eq("un-refresh-token"), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token",
                         "ROLE_USER", "membre@assrone.ch", Duration.ofDays(7), 1L));
     }
@@ -224,7 +225,7 @@ class AuthCookieOriginFilterIntegrationTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
-        when(refreshTokenService.issueTokens(any())).thenReturn(
+        when(refreshTokenService.issueTokens(any(), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
 

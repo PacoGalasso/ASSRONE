@@ -92,10 +92,12 @@ class ProductionStartupSafetyTest {
     private static Map<String, String> baseProductionProperties() {
         Map<String, String> properties = new LinkedHashMap<>();
         properties.put("spring.jpa.hibernate.ddl-auto", "update");
-        // Explicit even though application.properties already sets this: Hibernate
-        // (ddl-auto=update, forced above for this schema-less H2 test) creates the
-        // schema before FlywayStartupMigrator runs, so Flyway sees a non-empty schema
-        // with no history table and needs this to auto-baseline instead of refusing.
+        // Explicit even though application.properties already sets this: even with no
+        // pending migrations in this H2 test's empty Flyway location, Flyway still
+        // fires LegacyBaselineFlywayCallback on BEFORE_MIGRATE, which creates
+        // users/membership_applications/events/event_registrations/documents
+        // directly — so Flyway still finds a non-empty schema with no history table
+        // and needs this to auto-baseline instead of refusing.
         properties.put("spring.flyway.baseline-on-migrate", "true");
         return withJwtSecret(properties);
     }
@@ -184,6 +186,7 @@ class ProductionStartupSafetyTest {
         // application.properties' own "local" default, not force a profile — the whole
         // point is proving ProductionSecurityGuard stays inactive under that default.
         Map<String, String> properties = withJwtSecret(new LinkedHashMap<>());
+        properties.put("spring.jpa.hibernate.ddl-auto", "update");
         SpringApplicationBuilder builder = baseBuilder("production-startup-safety-local");
 
         runWithSystemProperties(builder, properties, context -> { });

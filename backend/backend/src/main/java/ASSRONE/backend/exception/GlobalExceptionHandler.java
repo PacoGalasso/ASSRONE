@@ -121,6 +121,21 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(InvalidSessionIdException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidSessionId(InvalidSessionIdException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    // Deliberately identical (status, body shape) regardless of whether the
+    // session ID is unknown or belongs to another user — see
+    // SessionNotFoundException's own javadoc.
+    @ExceptionHandler(SessionNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleSessionNotFound(SessionNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationErrors(MethodArgumentNotValidException ex) {
         Map<String, Object> errors = new HashMap<>();

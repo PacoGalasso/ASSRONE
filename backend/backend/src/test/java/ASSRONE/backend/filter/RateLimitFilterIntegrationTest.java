@@ -62,7 +62,7 @@ class RateLimitFilterIntegrationTest {
         authenticationManager = mock(AuthenticationManager.class);
         UserInfoService userInfoService = mock(UserInfoService.class);
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
-        when(refreshTokenService.issueTokens(any())).thenReturn(
+        when(refreshTokenService.issueTokens(any(), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
@@ -78,7 +78,7 @@ class RateLimitFilterIntegrationTest {
 
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory("refresh_token", false, "Lax", "/auth");
         UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager,
-                loginAttemptService, refreshCookieFactory, new SecurityAuditService(clientIpResolver));
+                loginAttemptService, refreshCookieFactory, new SecurityAuditService(clientIpResolver), clientIpResolver);
         ContactController contactController = new ContactController(contactEmailService);
         MembershipApplicationController membershipApplicationController =
                 new MembershipApplicationController(membershipApplicationService);
@@ -272,13 +272,13 @@ class RateLimitFilterIntegrationTest {
 
         UserInfoService userInfoService = mock(UserInfoService.class);
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
-        when(refreshTokenService.issueTokens(any())).thenReturn(
+        when(refreshTokenService.issueTokens(any(), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory("refresh_token", false, "Lax", "/auth");
         UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager,
-                loginAttemptService, refreshCookieFactory, new SecurityAuditService(clientIpResolver));
+                loginAttemptService, refreshCookieFactory, new SecurityAuditService(clientIpResolver), clientIpResolver);
 
         return MockMvcBuilders
                 .standaloneSetup(userController)

@@ -91,7 +91,7 @@ class AuthEndpointsSecurityHeadersTest {
 
     @Test
     void refreshReussiConserveLaValidationDOrigineEtLesHeadersDeSecurite() throws Exception {
-        when(refreshTokenService.rotate("un-refresh-token")).thenReturn(
+        when(refreshTokenService.rotate(org.mockito.ArgumentMatchers.eq("un-refresh-token"), org.mockito.ArgumentMatchers.any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token",
                         "ROLE_USER", "membre@assrone.ch", Duration.ofDays(7), 1L));
 

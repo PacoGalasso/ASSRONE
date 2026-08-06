@@ -4,6 +4,7 @@ import {AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Val
 import {ProfileService} from '../../core/auth/services/profile-service';
 import {UserProfile} from '../../core/auth/models/profile.model';
 import {DatePipe} from '@angular/common';
+import {ProfileSessions} from './sessions/profile-sessions';
 
 
 function passwordsMatchValidator(control: AbstractControl): ValidationErrors | null {
@@ -15,7 +16,7 @@ function passwordsMatchValidator(control: AbstractControl): ValidationErrors | n
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [ReactiveFormsModule, DatePipe],
+  imports: [ReactiveFormsModule, DatePipe, ProfileSessions],
   templateUrl: './profile.html',
 })
 export class Profile implements OnInit {

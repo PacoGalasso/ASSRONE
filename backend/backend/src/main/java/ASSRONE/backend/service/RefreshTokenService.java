@@ -6,6 +6,7 @@ import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.exception.InvalidRefreshTokenException;
 import ASSRONE.backend.model.RefreshToken;
 import ASSRONE.backend.model.User;
+import ASSRONE.backend.model.UserSession;
 import ASSRONE.backend.repository.RefreshTokenRepository;
 import ASSRONE.backend.repository.UserInfoRepository;
 import io.jsonwebtoken.JwtException;
@@ -43,20 +44,21 @@ public class RefreshTokenService {
     private final JwtService jwtService;
     private final Clock clock;
     private final SecurityAuditService securityAuditService;
+    private final SessionService sessionService;
 
     public record IssuedTokens(String accessToken, String refreshToken, String role, String email,
                                 Duration refreshTokenMaxAge, Long userId) {
     }
 
     @Transactional
-    public IssuedTokens issueTokens(String email) {
+    public IssuedTokens issueTokens(String email, String clientIp, String rawUserAgent) {
         User user = userInfoRepository.findByEmail(email)
                 .orElseThrow(() -> new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE));
-        return mintAndPersist(user);
+        return mintAndPersistNewSession(user, clientIp, rawUserAgent);
     }
 
     @Transactional
-    public IssuedTokens rotate(String presentedRefreshToken) {
+    public IssuedTokens rotate(String presentedRefreshToken, String clientIp) {
         String type;
         String email;
         String jti;
@@ -82,12 +84,26 @@ public class RefreshTokenService {
                 });
 
         if (stored.getRevokedAt() != null) {
-            // A revoked jti being presented again means either the original
-            // refresh already rotated it away, or it was stolen and replayed
-            // after the legitimate client rotated. Either way, the whole
-            // family of tokens for this user is now suspect: revoke all of
-            // them rather than just this one.
+            if (sessionService.isSessionRevoked(stored.getSessionId())) {
+                // This jti's session was explicitly revoked (logout, a
+                // deliberate "revoke this session" action, limit
+                // enforcement, a password change...) — the token being
+                // revoked is the direct, expected consequence of that, not
+                // evidence of theft. Escalating this to reuse-detection
+                // would wrongly nuke every other session the user still has
+                // open just because one already-logged-out device tried to
+                // refresh.
+                recordRefreshDenied(SecurityEventType.REFRESH_DENIED, String.valueOf(stored.getUserId()), "SESSION_REVOKED");
+                throw new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
+            }
+            // A revoked jti being presented again, from a session that is
+            // itself still active, means either the original refresh already
+            // rotated it away, or it was stolen and replayed after the
+            // legitimate client rotated. Either way, the whole family of
+            // tokens for this user is now suspect: revoke all of them rather
+            // than just this one.
             refreshTokenRepository.revokeAllForUser(stored.getUserId(), LocalDateTime.now(clock));
+            sessionService.revokeAllSessionsSilently(stored.getUserId(), "REFRESH_TOKEN_REUSE_DETECTED");
             recordRefreshDenied(SecurityEventType.REFRESH_TOKEN_REUSE_DETECTED,
                     String.valueOf(stored.getUserId()), "REVOKED_TOKEN_REUSED");
             throw new InvalidRefreshTokenException(INVALID_REFRESH_TOKEN_MESSAGE);
@@ -117,7 +133,7 @@ public class RefreshTokenService {
 
         refreshTokenRepository.revokeByJti(jti, LocalDateTime.now(clock));
 
-        IssuedTokens tokens = mintAndPersist(user);
+        IssuedTokens tokens = mintAndPersistExistingSession(user, stored.getSessionId(), clientIp);
         securityAuditService.record(SecurityEventType.REFRESH_SUCCESS, SecurityEventResult.SUCCESS,
                 String.valueOf(user.getId()), tokens.role(), "refreshToken", null, null);
         return tokens;
@@ -144,6 +160,8 @@ public class RefreshTokenService {
             String jti = jwtService.extractJti(presentedRefreshToken);
             String email = jwtService.extractUsername(presentedRefreshToken);
             if (jti != null) {
+                refreshTokenRepository.findByJti(jti)
+                        .ifPresent(stored -> sessionService.revokeSessionSilently(stored.getSessionId(), "LOGOUT"));
                 refreshTokenRepository.revokeByJti(jti, LocalDateTime.now(clock));
             }
             securityAuditService.record(SecurityEventType.LOGOUT, SecurityEventResult.SUCCESS,
@@ -158,14 +176,16 @@ public class RefreshTokenService {
     }
 
     /**
-     * Invalidates every refresh token currently issued to a user, regardless
-     * of which device or session it belongs to. Used after a password
-     * change: a refresh token stolen before the change must not remain
-     * usable afterwards.
+     * Invalidates every refresh token and every session currently issued to
+     * a user, regardless of which device or session it belongs to. Used
+     * after a password change: a refresh token stolen before the change
+     * must not remain usable afterwards, and the "Sessions actives" list
+     * must not go on showing sessions that can no longer refresh as active.
      */
     @Transactional
     public void revokeAllForUser(Long userId) {
         refreshTokenRepository.revokeAllForUser(userId, LocalDateTime.now(clock));
+        sessionService.revokeAllSessionsSilently(userId, "PASSWORD_CHANGE");
     }
 
     private boolean isUsable(User user) {
@@ -176,20 +196,53 @@ public class RefreshTokenService {
         return lockedUntil == null || lockedUntil.isBefore(LocalDateTime.now(clock));
     }
 
-    private IssuedTokens mintAndPersist(User user) {
-        String accessToken = jwtService.generateToken(user.getEmail());
+    /**
+     * Login: mints a token pair for a brand-new UserSession. Session-limit
+     * enforcement (SessionService#createSession) runs before the tokens
+     * themselves, since the access token's "sid" claim needs the new
+     * session's public ID to already exist.
+     */
+    private IssuedTokens mintAndPersistNewSession(User user, String clientIp, String rawUserAgent) {
         String jti = UUID.randomUUID().toString();
         String refreshToken = jwtService.generateRefreshToken(user.getEmail(), jti);
+        LocalDateTime expiresAt = refreshExpiresAt(refreshToken);
+
+        UserSession session = sessionService.createSession(user.getId(), expiresAt, clientIp, rawUserAgent);
+        return persist(user, session, jti, refreshToken, expiresAt);
+    }
+
+    /**
+     * Refresh: mints a token pair that continues an existing UserSession —
+     * the session survives the rotation unchanged (same public ID, so the
+     * "sid" claim and therefore "which session is this" stays stable for
+     * the caller), only its lastUsedAt/expiresAt/lastSeenIp bookkeeping is
+     * refreshed.
+     */
+    private IssuedTokens mintAndPersistExistingSession(User user, Long sessionId, String clientIp) {
+        String jti = UUID.randomUUID().toString();
+        String refreshToken = jwtService.generateRefreshToken(user.getEmail(), jti);
+        LocalDateTime expiresAt = refreshExpiresAt(refreshToken);
+
+        UserSession session = sessionService.touchSession(sessionId, expiresAt, clientIp);
+        return persist(user, session, jti, refreshToken, expiresAt);
+    }
+
+    private LocalDateTime refreshExpiresAt(String refreshToken) {
         Instant expirationInstant = jwtService.extractExpiration(refreshToken).toInstant();
         // Derived from the injected clock's own zone, never ZoneId.systemDefault():
         // that keeps this value directly comparable to every other
         // LocalDateTime.now(clock) call in this class (the expiresAt check in
         // rotate(), lockedUntil, ...), regardless of what zone the JVM happens
         // to be running in.
-        LocalDateTime expiresAt = LocalDateTime.ofInstant(expirationInstant, clock.getZone());
+        return LocalDateTime.ofInstant(expirationInstant, clock.getZone());
+    }
+
+    private IssuedTokens persist(User user, UserSession session, String jti, String refreshToken, LocalDateTime expiresAt) {
+        String accessToken = jwtService.generateToken(user.getEmail(), session.getPublicId());
 
         RefreshToken entity = RefreshToken.builder()
                 .userId(user.getId())
+                .sessionId(session.getId())
                 .jti(jti)
                 .tokenHash(hash(refreshToken))
                 .expiresAt(expiresAt)
@@ -202,7 +255,10 @@ public class RefreshTokenService {
         // so Duration.between two of them is only correct if both happened to
         // be derived from the exact same zone. Instant arithmetic sidesteps
         // that trap entirely and stays correct across DST transitions and
-        // regardless of the JVM's default time zone.
+        // regardless of the JVM's default time zone. Re-extracted directly
+        // from the token rather than re-derived from expiresAt, so this uses
+        // the exact same Instant the token's own expiration is built from.
+        Instant expirationInstant = jwtService.extractExpiration(refreshToken).toInstant();
         Duration maxAge = Duration.between(clock.instant(), expirationInstant);
         return new IssuedTokens(accessToken, refreshToken, role, user.getEmail(), maxAge, user.getId());
     }

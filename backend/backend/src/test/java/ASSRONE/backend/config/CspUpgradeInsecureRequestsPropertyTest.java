@@ -64,6 +64,8 @@ class CspUpgradeInsecureRequestsPropertyTest {
     @Test
     void profilLocalNActivePasUpgradeInsecureRequestsParDefaut() {
         Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("spring.jpa.hibernate.ddl-auto", "update");
+        properties.put("spring.flyway.baseline-on-migrate", "true");
         properties.put("app.jwt.secret", VALID_JWT_SECRET);
         SpringApplicationBuilder builder = baseBuilder("csp-property-local");
 
