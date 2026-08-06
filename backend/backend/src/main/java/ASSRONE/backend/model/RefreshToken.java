@@ -21,6 +21,15 @@ public class RefreshToken {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    // nullable=false here matches the real Postgres constraint exactly (V7
+    // backfills every existing row before adding it): safe precisely because
+    // Hibernate never runs any schema DDL against this table before that
+    // constraint already exists — see LegacyBaselineFlywayCallback and
+    // application.properties (ddl-auto=validate, unconditional, every
+    // environment) for the ordering guarantee that makes this true.
+    @Column(name = "session_id", nullable = false)
+    private Long sessionId;
+
     @Column(nullable = false, unique = true, length = 36)
     private String jti;
 

@@ -32,13 +32,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * baselineOnMigrate only triggers baseline() "against a non-empty schema with
  * no schema history table" (see Flyway docs) — on a genuinely empty database
  * it is a no-op, and migrate() then runs from V1 for real, which fails here
- * since V1 expects membership_applications to already exist (normally
- * created by Hibernate before Flyway ever runs — see FlywayStartupMigrator).
- * A minimal, unrelated marker table is created first purely to make the
- * schema non-empty so baselineOnMigrate actually engages, exactly as the two
- * sibling tests do by pre-creating the one real table their own migration
- * needs. V1/V2/V3 themselves are untouched and still exercised in isolation
- * by their own dedicated tests.
+ * since V1 expects membership_applications to already exist (in the real
+ * application this is created by LegacyBaselineFlywayCallback, a
+ * Spring-managed bean that this test's own isolated Flyway.configure()
+ * instance never wires in). A minimal, unrelated marker table is created
+ * first purely to make the schema non-empty so baselineOnMigrate actually
+ * engages, exactly as the two sibling tests do by pre-creating the one real
+ * table their own migration needs. V1/V2/V3 themselves are untouched and
+ * still exercised in isolation by their own dedicated tests.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class FlywayCommitteeMembersMigrationTest {

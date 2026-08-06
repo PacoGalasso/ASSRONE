@@ -100,6 +100,19 @@ export class AuthService implements OnDestroy {
     });
   }
 
+  // Used when a session was already revoked server-side through a different
+  // endpoint than /auth/logout — revoking the current session, or every
+  // session, from "Sessions actives" (see SessionService). Clears local
+  // state and syncs other tabs exactly like logout() does, but never calls
+  // POST /auth/logout again (already redundant: the revocation already
+  // happened) and never attempts a token refresh first, since the refresh
+  // token backing this tab is already gone server-side.
+  endLocalSession(): void {
+    this.clearAuth();
+    this.broadcastLogout();
+    this.router.navigate(['/']);
+  }
+
   isAdmin(): boolean {
     return this.userSignal()?.role === 'ROLE_ADMIN';
   }

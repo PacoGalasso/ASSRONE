@@ -19,15 +19,19 @@ import java.sql.Statement;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Proves that adding failedLoginAttempts/lockedUntil to the User entity is safe
- * against an existing, already-populated "users" table that predates this lot
- * (no failed_login_attempts/locked_until columns yet). The users table is
- * seeded via raw JDBC before the Spring context starts, so Hibernate's
- * ddl-auto=update — not a Flyway migration, see LOT 7b's schema decision — is
- * what must ALTER TABLE safely. If columnDefinition were missing on the new
- * @Column annotations, Hibernate's generated "ADD COLUMN ... NOT NULL" without
- * a default would fail outright against a non-empty table, and this whole test
- * class would fail at context startup rather than at any individual assertion.
+ * Proves that V8__add_users_lockout_columns.sql safely adds
+ * failed_login_attempts/locked_until to an existing, already-populated
+ * "users" table that predates them (a real historical state: these columns
+ * were originally added via Hibernate's ddl-auto=update ALTER TABLE, before
+ * Flyway was given a tracked migration for them — see V8's own header). The
+ * users table is seeded via raw JDBC before the Spring context starts,
+ * without either column, so Flyway's real migration chain — not Hibernate,
+ * which never alters or creates schema anywhere in this application (see
+ * application.properties, ddl-auto=validate unconditionally) — is what must
+ * apply V8 safely against a non-empty table. If V8's ALTER TABLE lacked a
+ * default, adding a NOT NULL column would fail outright against a non-empty
+ * table, and this whole test class would fail at context startup rather than
+ * at any individual assertion.
  */
 @SpringBootTest
 @Testcontainers(disabledWithoutDocker = true)

@@ -9,6 +9,7 @@ import ASSRONE.backend.exception.InvalidCredentialsException;
 import ASSRONE.backend.exception.InvalidRefreshTokenException;
 import ASSRONE.backend.model.AuthRequest;
 import ASSRONE.backend.model.AuthResponse;
+import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.LoginAttemptService;
 import ASSRONE.backend.service.RefreshTokenService;
@@ -41,6 +42,7 @@ public class UserController {
     private final LoginAttemptService loginAttemptService;
     private final RefreshCookieFactory refreshCookieFactory;
     private final SecurityAuditService securityAuditService;
+    private final ClientIpResolver clientIpResolver;
 
     @GetMapping("/welcome")
     public String welcome() {
@@ -56,7 +58,8 @@ public class UserController {
     // frontend contract; this is the real login endpoint (email + password in,
     // access token in the JSON body out, refresh token in an HttpOnly cookie).
     @PostMapping("/generateToken")
-    public AuthResponse authenticateAndGetToken(@Valid @RequestBody AuthRequest authRequest, HttpServletResponse response) {
+    public AuthResponse authenticateAndGetToken(@Valid @RequestBody AuthRequest authRequest,
+                                                 HttpServletRequest request, HttpServletResponse response) {
         String normalizedEmail = normalizeEmail(authRequest.getEmail());
 
         try {
@@ -69,7 +72,8 @@ public class UserController {
         }
 
         loginAttemptService.resetFailedAttempts(normalizedEmail);
-        RefreshTokenService.IssuedTokens tokens = refreshTokenService.issueTokens(normalizedEmail);
+        RefreshTokenService.IssuedTokens tokens = refreshTokenService.issueTokens(
+                normalizedEmail, clientIpResolver.resolve(request), request.getHeader("User-Agent"));
         setRefreshCookie(response, tokens);
 
         securityAuditService.record(SecurityEventType.LOGIN_SUCCESS, SecurityEventResult.SUCCESS,
@@ -110,7 +114,7 @@ public class UserController {
             throw new InvalidRefreshTokenException(REFRESH_TOKEN_MISSING_MESSAGE);
         }
 
-        RefreshTokenService.IssuedTokens tokens = refreshTokenService.rotate(refreshTokenCookie);
+        RefreshTokenService.IssuedTokens tokens = refreshTokenService.rotate(refreshTokenCookie, clientIpResolver.resolve(request));
         setRefreshCookie(response, tokens);
 
         return new AuthResponse(tokens.accessToken(), tokens.email(), tokens.role());

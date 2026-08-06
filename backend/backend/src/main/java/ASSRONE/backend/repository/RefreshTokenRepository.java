@@ -34,4 +34,26 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE RefreshToken t SET t.revokedAt = :revokedAt WHERE t.userId = :userId AND t.revokedAt IS NULL")
     int revokeAllForUser(@Param("userId") Long userId, @Param("revokedAt") LocalDateTime revokedAt);
+
+    /**
+     * Used when a single session is revoked: every refresh token minted
+     * across that session's rotations (not just its current one) must stop
+     * working, so the next presented one — whichever rotation it is — is
+     * denied.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE RefreshToken t SET t.revokedAt = :revokedAt WHERE t.sessionId = :sessionId AND t.revokedAt IS NULL")
+    int revokeAllForSession(@Param("sessionId") Long sessionId, @Param("revokedAt") LocalDateTime revokedAt);
+
+    /**
+     * Used by "revoke other sessions": every token belonging to any session
+     * other than the caller's current one is revoked, but the current
+     * session's own still-open refresh token is deliberately left alone —
+     * otherwise the caller performing this action would be logged out too.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE RefreshToken t SET t.revokedAt = :revokedAt "
+            + "WHERE t.userId = :userId AND t.sessionId <> :keepSessionId AND t.revokedAt IS NULL")
+    int revokeAllForUserExceptSession(@Param("userId") Long userId, @Param("keepSessionId") Long keepSessionId,
+                                       @Param("revokedAt") LocalDateTime revokedAt);
 }

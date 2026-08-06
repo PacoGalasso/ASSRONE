@@ -182,6 +182,45 @@ describe('JwtInterceptor', () => {
     httpMock.expectNone('/auth/refresh');
   });
 
+  it.each([404, 410, 500])(
+    'should never attempt a refresh for a %s error — it stays local to the failing request',
+    (status) => {
+      // #given
+      loginWith('access-token');
+      const logoutSpy = vi.spyOn(authService, 'logout').mockImplementation(() => {});
+      let receivedError: unknown;
+
+      // #when: representative of a failed avatar fetch (GET /api/profile/avatar)
+      http.get('/api/profile/avatar').subscribe({error: (err) => receivedError = err});
+
+      // #then
+      httpMock.expectOne('/api/profile/avatar')
+        .flush(null, {status, statusText: 'Error'});
+
+      expect(receivedError).toBeTruthy();
+      expect(logoutSpy).not.toHaveBeenCalled();
+      httpMock.expectNone('/auth/refresh');
+    }
+  );
+
+  it('should never attempt a refresh for a network error — it stays local to the failing request', () => {
+    // #given
+    loginWith('access-token');
+    const logoutSpy = vi.spyOn(authService, 'logout').mockImplementation(() => {});
+    let receivedError: unknown;
+
+    // #when
+    http.get('/api/profile/avatar').subscribe({error: (err) => receivedError = err});
+
+    // #then
+    httpMock.expectOne('/api/profile/avatar')
+      .error(new ProgressEvent('error'));
+
+    expect(receivedError).toBeTruthy();
+    expect(logoutSpy).not.toHaveBeenCalled();
+    httpMock.expectNone('/auth/refresh');
+  });
+
   it('should also error out queued requests, instead of hanging, when the shared refresh fails', () => {
     // #given
     loginWith('expired-token');

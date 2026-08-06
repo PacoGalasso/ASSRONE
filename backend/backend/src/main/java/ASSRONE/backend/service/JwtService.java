@@ -35,6 +35,14 @@ public class JwtService {
     public static final String TOKEN_TYPE_ACCESS = "access";
     public static final String TOKEN_TYPE_REFRESH = "refresh";
 
+    // Identifies which UserSession an access token was issued for. Stable
+    // across every refresh-token rotation of that session, different on
+    // every new login. Never replaces "sub" and grants no authority by
+    // itself — JwtAuthFilter still authenticates purely on username/role;
+    // this is only read where a caller needs to know "is this my current
+    // session" (GET/DELETE /api/me/sessions/**).
+    public static final String SESSION_ID_CLAIM = "sid";
+
     private final UserDetailsService userDetailsService;
     private final SecretKey signingKey;
 
@@ -67,6 +75,17 @@ public class JwtService {
 
     // ===== ACCESS TOKEN =====
     public String generateToken(String email) {
+        return generateToken(email, null);
+    }
+
+    /**
+     * Same access token as {@link #generateToken(String)}, additionally
+     * carrying the owning session's opaque public ID as the "sid" claim.
+     * Used by RefreshTokenService, which always has a session in hand when
+     * minting an access token; the sid-less overload above remains for
+     * anything that only needs a bare authenticated identity.
+     */
+    public String generateToken(String email, String sessionId) {
         UserDetails userDetails = userDetailsService.loadUserByUsername(email);
         String role = userDetails.getAuthorities()
                 .stream()
@@ -74,7 +93,9 @@ public class JwtService {
                 .findFirst()
                 .orElse("ROLE_USER");
 
-        Map<String, Object> claims = Map.of("role", role, TOKEN_TYPE_CLAIM, TOKEN_TYPE_ACCESS);
+        Map<String, Object> claims = sessionId == null
+                ? Map.of("role", role, TOKEN_TYPE_CLAIM, TOKEN_TYPE_ACCESS)
+                : Map.of("role", role, TOKEN_TYPE_CLAIM, TOKEN_TYPE_ACCESS, SESSION_ID_CLAIM, sessionId);
         return generateToken(claims, email, ACCESS_TOKEN_DURATION, null);
     }
 
@@ -119,6 +140,10 @@ public class JwtService {
 
     public String extractJti(String token) {
         return extractClaim(token, Claims::getId);
+    }
+
+    public String extractSessionId(String token) {
+        return extractClaim(token, claims -> claims.get(SESSION_ID_CLAIM, String.class));
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {

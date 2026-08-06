@@ -7,6 +7,7 @@ import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
 import ASSRONE.backend.exception.InvalidRefreshTokenException;
+import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.LoginAttemptService;
 import ASSRONE.backend.service.RefreshTokenService;
@@ -72,7 +73,7 @@ class UserControllerTest {
         securityAuditService = mock(SecurityAuditService.class);
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory(REFRESH_COOKIE_NAME, false, "Lax", "/auth");
         UserController controller = new UserController(userInfoService, refreshTokenService, authenticationManager,
-                loginAttemptService, refreshCookieFactory, securityAuditService);
+                loginAttemptService, refreshCookieFactory, securityAuditService, new ClientIpResolver(""));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler(refreshCookieFactory))
                 .build();
@@ -161,7 +162,7 @@ class UserControllerTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
-        when(refreshTokenService.issueTokens("membre@assrone.ch")).thenReturn(
+        when(refreshTokenService.issueTokens(eq("membre@assrone.ch"), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
 
@@ -187,7 +188,7 @@ class UserControllerTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
-        when(refreshTokenService.issueTokens("membre@assrone.ch")).thenReturn(
+        when(refreshTokenService.issueTokens(eq("membre@assrone.ch"), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
 
@@ -285,7 +286,7 @@ class UserControllerTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
-        when(refreshTokenService.issueTokens(any())).thenReturn(
+        when(refreshTokenService.issueTokens(any(), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
 
@@ -298,7 +299,7 @@ class UserControllerTest {
 
         InOrder ordre = inOrder(loginAttemptService, refreshTokenService);
         ordre.verify(loginAttemptService).resetFailedAttempts("membre@assrone.ch");
-        ordre.verify(refreshTokenService).issueTokens("membre@assrone.ch");
+        ordre.verify(refreshTokenService).issueTokens(eq("membre@assrone.ch"), any(), any());
     }
 
     @Test
@@ -414,7 +415,7 @@ class UserControllerTest {
 
     @Test
     void refreshValideRetourneUnNouveauCoupleDeTokens() throws Exception {
-        when(refreshTokenService.rotate("ancien-refresh-token")).thenReturn(
+        when(refreshTokenService.rotate(eq("ancien-refresh-token"), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("nouveau-access-token", "nouveau-refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
 
@@ -431,7 +432,7 @@ class UserControllerTest {
 
     @Test
     void refreshInvalideRetourne401SansDetailInterne() throws Exception {
-        when(refreshTokenService.rotate("token-invalide"))
+        when(refreshTokenService.rotate(eq("token-invalide"), any()))
                 .thenThrow(new InvalidRefreshTokenException("Refresh token invalide ou expiré."));
 
         mockMvc.perform(post("/auth/refresh")

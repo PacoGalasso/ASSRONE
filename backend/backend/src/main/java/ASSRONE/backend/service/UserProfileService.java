@@ -134,12 +134,22 @@ public class UserProfileService {
         }
     }
 
+    // Returns null both when the user has no avatar on record and when the
+    // record points at a file no longer on disk (e.g. removed outside the
+    // app, or lost with the upload volume) — the controller already treats a
+    // null Resource as "no avatar" (404). Without this existence check, a
+    // stale reference would reach the client as an uncaught
+    // FileNotFoundException from Resource#contentLength() during response
+    // serialization, past the point any @ExceptionHandler can intercept it.
     public Resource loadAvatar(String email) throws MalformedURLException {
         User user = findByEmailOrThrow(email);
         if (user.getAvatarFilename() == null) {
             return null;
         }
         Path path = Paths.get(uploadDir, "avatars").resolve(user.getAvatarFilename());
+        if (!Files.exists(path)) {
+            return null;
+        }
         return new UrlResource(path.toUri());
     }
 
