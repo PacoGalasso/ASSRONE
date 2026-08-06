@@ -28,6 +28,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 
@@ -48,6 +50,7 @@ public class MembershipApplicationService {
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
     private final SecurityAuditService securityAuditService;
+    private final Clock clock;
 
     @Transactional
     public MembershipApplicationDto submit(CreateMembershipApplicationRequest request) {
@@ -150,6 +153,14 @@ public class MembershipApplicationService {
         String lastName = nameParts.length > 1 ? nameParts[1] : "";
         String username = findAvailableUsername(application.getEmail().split("@")[0]);
 
+        // The only normal account-creation path: an administrator has already
+        // reviewed this application against the email address it was submitted
+        // with, so there is nothing left for a token-based email-verification
+        // round trip to prove. Setting this immediately — rather than leaving
+        // it null pending a verification email that this path never sends —
+        // is what makes the very next step (credentials delivery, then login)
+        // actually reachable; a null value here would silently and permanently
+        // lock the new member out (see UserController#authenticateAndGetToken).
         User user = User.builder()
                 .email(application.getEmail())
                 .username(username)
@@ -157,6 +168,7 @@ public class MembershipApplicationService {
                 .firstName(firstName)
                 .lastName(lastName)
                 .role("USER")
+                .emailVerifiedAt(LocalDateTime.now(clock))
                 .build();
         try {
             userInfoRepository.save(user);

@@ -118,6 +118,12 @@ class LoginLockoutIntegrationTest {
     @Autowired
     private Clock clock;
 
+    // This class exercises the login-lockout mechanism, not email
+    // verification — every seeded account here represents a pre-existing,
+    // already-verified account (the scenario V9's backfill exists for), so
+    // emailVerifiedAt is set explicitly. A real new registration is
+    // deliberately NOT auto-verified this way (see UserInfoService#addUser);
+    // this fixture never simulates that flow.
     private String seedAccount(String email) {
         userInfoRepository.findByEmail(email).ifPresent(userInfoRepository::delete);
         userInfoRepository.saveAndFlush(User.builder()
@@ -128,6 +134,7 @@ class LoginLockoutIntegrationTest {
                 .password(passwordEncoder.encode(PASSWORD))
                 .role("USER")
                 .isActive(true)
+                .emailVerifiedAt(LocalDateTime.now(clock))
                 .build());
         return email;
     }

@@ -14,7 +14,15 @@ const PUBLIC_AUTH_ENDPOINTS = [
   '/auth/addNewUser',
   '/auth/welcome',
   '/auth/refresh',
-  '/auth/logout'
+  '/auth/logout',
+  // Token-based, unauthenticated account-lifecycle endpoints: a 400/404/410 on
+  // an invalid or expired token here is never a signal that the current
+  // session's own access token is stale, so it must never enter the
+  // refresh-then-logout path below (see Partie 12 of the account-lifecycle lot).
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/verify-email',
+  '/auth/resend-verification'
 ];
 
 @Injectable()

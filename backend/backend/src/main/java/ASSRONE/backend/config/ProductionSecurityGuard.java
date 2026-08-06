@@ -30,7 +30,9 @@ public class ProductionSecurityGuard {
             "zTjvaDrwlDQTMdHQ9vSfqXGwdkGSXJtT09uCOP+KLfO0RmyO617AZi/hK7VKCiKe";
 
     public ProductionSecurityGuard(RefreshCookieProperties refreshCookieProperties,
-                                    @Value("${app.jwt.secret:}") String jwtSecret) {
+                                    @Value("${app.jwt.secret:}") String jwtSecret,
+                                    @Value("${spring.mail.host:}") String smtpHost,
+                                    @Value("${spring.mail.password:}") String smtpPassword) {
         if (!refreshCookieProperties.secure()) {
             throw new IllegalStateException(
                     "app.security.refresh-cookie.secure doit valoir true en profil production : "
@@ -42,6 +44,19 @@ public class ProductionSecurityGuard {
                     "app.jwt.secret utilise la clé de test publique de ce dépôt : elle ne doit jamais "
                             + "signer un token en production. Générez un nouveau secret aléatoire "
                             + "(voir .env.example) et positionnez-le via la variable d'environnement JWT_SECRET.");
+        }
+        // application-production.properties leaves spring.mail.host/password with no
+        // default, so an entirely unset SMTP_HOST/SMTP_PASSWORD already fails to start
+        // via Spring's own "could not resolve placeholder" error. This only catches the
+        // narrower case those placeholders can't: an operator setting the environment
+        // variable to an explicit empty string, which resolves successfully but would
+        // silently break every password-reset/email-verification send in production.
+        if (smtpHost.isBlank() || smtpPassword.isBlank()) {
+            throw new IllegalStateException(
+                    "spring.mail.host et spring.mail.password sont obligatoires en profil production : "
+                            + "aucun email de réinitialisation de mot de passe ou de vérification d'adresse "
+                            + "ne peut être envoyé sans eux. Vérifiez les variables d'environnement "
+                            + "SMTP_HOST et SMTP_PASSWORD.");
         }
     }
 }

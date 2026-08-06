@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.ChangePasswordRequest;
 import ASSRONE.backend.dto.UpdateProfileRequest;
 import ASSRONE.backend.dto.UserProfileDto;
@@ -8,6 +11,8 @@ import ASSRONE.backend.exception.UserAlreadyExistsException;
 import ASSRONE.backend.mapper.UserProfileMapper;
 import ASSRONE.backend.model.User;
 import ASSRONE.backend.repository.UserInfoRepository;
+import ASSRONE.backend.security.EmailNormalizer;
+import ASSRONE.backend.security.PasswordPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +21,7 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -23,7 +29,6 @@ import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Locale;
 import java.util.UUID;
 
 @Slf4j
@@ -36,6 +41,8 @@ public class UserProfileService {
     private final PasswordEncoder passwordEncoder;
     private final AvatarImageInspector avatarImageInspector;
     private final RefreshTokenService refreshTokenService;
+    private final SecurityAuditService securityAuditService;
+    private final EmailVerificationService emailVerificationService;
 
     @Value("${app.upload-dir}")
     private String uploadDir;
@@ -45,6 +52,7 @@ public class UserProfileService {
         return userProfileMapper.toDto(user);
     }
 
+    @Transactional
     public UserProfileDto updateProfile(String email, UpdateProfileRequest request) {
         User user = findByEmailOrThrow(email);
 
@@ -52,8 +60,21 @@ public class UserProfileService {
         // login (UserController#normalizeEmail): without this, a member could
         // save their email with different casing/whitespace than what they type
         // at login (which always normalizes), locking themselves out.
-        String normalizedNewEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
-        if (!normalizedNewEmail.equalsIgnoreCase(user.getEmail())) {
+        String normalizedNewEmail = EmailNormalizer.normalize(request.getEmail());
+        boolean emailChanged = !normalizedNewEmail.equalsIgnoreCase(user.getEmail());
+
+        if (emailChanged) {
+            // Changing the account's email is sensitive enough to require
+            // re-proving the password, exactly like changePassword() requires
+            // the current password — otherwise a hijacked, still-logged-in
+            // session could silently redirect the account to an attacker's
+            // inbox.
+            if (request.getCurrentPassword() == null
+                    || !passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+                securityAuditService.record(SecurityEventType.EMAIL_CHANGE_REQUESTED, SecurityEventResult.DENIED,
+                        String.valueOf(user.getId()), null, "user", String.valueOf(user.getId()), "CURRENT_PASSWORD_INCORRECT");
+                throw new InvalidPasswordException("Le mot de passe actuel est incorrect");
+            }
             userRepository.findByEmail(normalizedNewEmail).ifPresent(existing -> {
                 throw new UserAlreadyExistsException("Un compte existe déjà avec l'email " + normalizedNewEmail);
             });
@@ -62,24 +83,53 @@ public class UserProfileService {
         user.setUsername(request.getUsername());
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
-        user.setEmail(normalizedNewEmail);
+        if (emailChanged) {
+            user.setEmail(normalizedNewEmail);
+            // The new address is unproven until its own verification link is
+            // clicked — never inherit the old address's verified status.
+            user.setEmailVerifiedAt(null);
+        }
         User saved = userRepository.save(user);
+
+        if (emailChanged) {
+            // A hijacked session that changes the email must not keep any
+            // session alive afterwards, including the one making this
+            // request — mirrors changePassword()'s full revocation.
+            refreshTokenService.revokeAllForUser(user.getId());
+            emailVerificationService.issueTokenAndSendEmail(saved, "EMAIL_CHANGED");
+            securityAuditService.record(SecurityEventType.EMAIL_CHANGE_REQUESTED, SecurityEventResult.SUCCESS,
+                    String.valueOf(user.getId()), null, "user", String.valueOf(user.getId()), null);
+        }
+
         return userProfileMapper.toDto(saved);
     }
 
+    @Transactional
     public void changePassword(String email, ChangePasswordRequest request) {
         User user = findByEmailOrThrow(email);
 
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            securityAuditService.record(SecurityEventType.PASSWORD_CHANGE_FAILED, SecurityEventResult.DENIED,
+                    String.valueOf(user.getId()), null, "user", String.valueOf(user.getId()), "CURRENT_PASSWORD_INCORRECT");
             throw new InvalidPasswordException("Le mot de passe actuel est incorrect");
         }
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            securityAuditService.record(SecurityEventType.PASSWORD_CHANGE_FAILED, SecurityEventResult.DENIED,
+                    String.valueOf(user.getId()), null, "user", String.valueOf(user.getId()), "SAME_AS_CURRENT");
+            throw new InvalidPasswordException("Le nouveau mot de passe doit être différent de l'actuel.");
+        }
+        PasswordPolicy.validate(request.getNewPassword());
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
 
         // A refresh token stolen before the password change must not remain
-        // usable afterwards — force every other session to require a fresh login.
+        // usable afterwards — force every other session (including the one
+        // that just made this change) to require a fresh login.
         refreshTokenService.revokeAllForUser(user.getId());
+
+        securityAuditService.record(SecurityEventType.PASSWORD_CHANGED, SecurityEventResult.SUCCESS,
+                String.valueOf(user.getId()), null, "user", String.valueOf(user.getId()), null);
     }
 
     public void uploadAvatar(String email, MultipartFile file) throws IOException {

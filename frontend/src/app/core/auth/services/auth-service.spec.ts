@@ -108,6 +108,76 @@ describe('AuthService', () => {
     });
   });
 
+  describe('forgotPassword', () => {
+    it('should POST the email and never touch auth state', () => {
+      // #given
+      const request = {email: 'membre@assrone.ch'};
+
+      // #when
+      service.forgotPassword(request).subscribe();
+
+      // #then
+      const req = httpMock.expectOne('/auth/forgot-password');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual(request);
+      req.flush({message: 'Si un compte correspond à cette adresse, un email a été envoyé.'});
+
+      expect(service.isLoggedIn()).toBe(false);
+      expect(service.getToken()).toBeNull();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('should POST the token and new password and never authenticate the user', () => {
+      // #given
+      const request = {token: 'un-token', newPassword: 'nouveauMotDePasse123'};
+
+      // #when
+      service.resetPassword(request).subscribe();
+
+      // #then
+      const req = httpMock.expectOne('/auth/reset-password');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual(request);
+      req.flush({message: 'Votre mot de passe a été réinitialisé.'});
+
+      expect(service.isLoggedIn()).toBe(false);
+      expect(service.getToken()).toBeNull();
+    });
+  });
+
+  describe('verifyEmail', () => {
+    it('should POST the token', () => {
+      // #given
+      const request = {token: 'un-token-de-verification'};
+
+      // #when
+      service.verifyEmail(request).subscribe();
+
+      // #then
+      const req = httpMock.expectOne('/auth/verify-email');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual(request);
+      req.flush({message: 'Votre adresse email a été vérifiée.'});
+    });
+  });
+
+  describe('resendVerification', () => {
+    it('should POST the email', () => {
+      // #given
+      const request = {email: 'membre@assrone.ch'};
+
+      // #when
+      service.resendVerification(request).subscribe();
+
+      // #then
+      const req = httpMock.expectOne('/auth/resend-verification');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual(request);
+      req.flush({message: 'Un nouvel email a été envoyé.'});
+    });
+  });
+
   describe('refreshToken', () => {
     it('should POST with credentials included and no token in the request body', () => {
       // #given

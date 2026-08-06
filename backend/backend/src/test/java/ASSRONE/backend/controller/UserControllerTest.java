@@ -7,6 +7,8 @@ import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.dto.RegisterResponse;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
 import ASSRONE.backend.exception.InvalidRefreshTokenException;
+import ASSRONE.backend.model.User;
+import ASSRONE.backend.repository.UserInfoRepository;
 import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.LoginAttemptService;
@@ -31,7 +33,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,6 +62,7 @@ class UserControllerTest {
     private static final String REFRESH_COOKIE_NAME = "refresh_token";
 
     private UserInfoService userInfoService;
+    private UserInfoRepository userInfoRepository;
     private AuthenticationManager authenticationManager;
     private RefreshTokenService refreshTokenService;
     private LoginAttemptService loginAttemptService;
@@ -67,16 +72,29 @@ class UserControllerTest {
     @BeforeEach
     void setUp() {
         userInfoService = mock(UserInfoService.class);
+        userInfoRepository = mock(UserInfoRepository.class);
         authenticationManager = mock(AuthenticationManager.class);
         refreshTokenService = mock(RefreshTokenService.class);
         loginAttemptService = mock(LoginAttemptService.class);
         securityAuditService = mock(SecurityAuditService.class);
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory(REFRESH_COOKIE_NAME, false, "Lax", "/auth");
-        UserController controller = new UserController(userInfoService, refreshTokenService, authenticationManager,
-                loginAttemptService, refreshCookieFactory, securityAuditService, new ClientIpResolver(""));
+        UserController controller = new UserController(userInfoService, userInfoRepository, refreshTokenService,
+                authenticationManager, loginAttemptService, refreshCookieFactory, securityAuditService, new ClientIpResolver(""));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler(refreshCookieFactory))
                 .build();
+    }
+
+    // A verified account with the given id/email — the default stub for every
+    // test exercising the successful-login path, now that UserController
+    // looks the user up post-credential-match to enforce the
+    // email-verified-before-login policy (see EmailNotVerifiedException).
+    private static User verifiedUser(Long id, String email) {
+        User user = new User();
+        user.setId(id);
+        user.setEmail(email);
+        user.setEmailVerifiedAt(LocalDateTime.now());
+        return user;
     }
 
     @Test
@@ -162,6 +180,7 @@ class UserControllerTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+        when(userInfoRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(verifiedUser(1L, "membre@assrone.ch")));
         when(refreshTokenService.issueTokens(eq("membre@assrone.ch"), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
@@ -188,6 +207,7 @@ class UserControllerTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+        when(userInfoRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(verifiedUser(1L, "membre@assrone.ch")));
         when(refreshTokenService.issueTokens(eq("membre@assrone.ch"), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
@@ -286,6 +306,7 @@ class UserControllerTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+        when(userInfoRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(verifiedUser(1L, "membre@assrone.ch")));
         when(refreshTokenService.issueTokens(any(), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
@@ -300,6 +321,51 @@ class UserControllerTest {
         InOrder ordre = inOrder(loginAttemptService, refreshTokenService);
         ordre.verify(loginAttemptService).resetFailedAttempts("membre@assrone.ch");
         ordre.verify(refreshTokenService).issueTokens(eq("membre@assrone.ch"), any(), any());
+    }
+
+    // ===== Politique de connexion : email non vérifié (lot account-lifecycle) =====
+
+    @Test
+    void compteNonVerifieRetourne403EtNemetAucunJwt() throws Exception {
+        UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
+                "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+        User nonVerifie = new User();
+        nonVerifie.setId(1L);
+        nonVerifie.setEmail("membre@assrone.ch");
+        nonVerifie.setEmailVerifiedAt(null);
+        when(userInfoRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(nonVerifie));
+
+        mockMvc.perform(post("/auth/generateToken")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"membre@assrone.ch","password":"bon-mot-de-passe"}
+                                """))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(refreshTokenService);
+        verify(loginAttemptService, Mockito.never()).resetFailedAttempts(any());
+    }
+
+    @Test
+    void compteNonVerifieJournaliseLoginFailureAvecReasonCodeEmailNotVerified() throws Exception {
+        UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
+                "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+        User nonVerifie = new User();
+        nonVerifie.setId(1L);
+        nonVerifie.setEmail("membre@assrone.ch");
+        nonVerifie.setEmailVerifiedAt(null);
+        when(userInfoRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(nonVerifie));
+
+        mockMvc.perform(post("/auth/generateToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"membre@assrone.ch","password":"bon-mot-de-passe"}
+                        """));
+
+        verify(securityAuditService).record(SecurityEventType.LOGIN_FAILURE, SecurityEventResult.DENIED,
+                "1", null, "user", "1", "EMAIL_NOT_VERIFIED");
     }
 
     @Test

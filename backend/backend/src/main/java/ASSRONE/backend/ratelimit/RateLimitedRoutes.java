@@ -16,7 +16,9 @@ public final class RateLimitedRoutes {
             new RateLimitedRoute(HttpMethod.POST, "/auth/addNewUser", RateLimitCategory.ACCOUNT_CREATION),
             new RateLimitedRoute(HttpMethod.POST, "/api/contact", RateLimitCategory.CONTACT),
             new RateLimitedRoute(HttpMethod.POST, "/api/membership-applications", RateLimitCategory.MEMBERSHIP_APPLICATION),
-            new RateLimitedRoute(HttpMethod.POST, "/api/events/*/register", RateLimitCategory.EVENT_REGISTRATION)
+            new RateLimitedRoute(HttpMethod.POST, "/api/events/*/register", RateLimitCategory.EVENT_REGISTRATION),
+            new RateLimitedRoute(HttpMethod.POST, "/auth/forgot-password", RateLimitCategory.PASSWORD_RESET_REQUEST),
+            new RateLimitedRoute(HttpMethod.POST, "/auth/resend-verification", RateLimitCategory.EMAIL_VERIFICATION_RESEND)
     );
 
     private RateLimitedRoutes() {

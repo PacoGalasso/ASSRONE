@@ -31,3 +31,29 @@ export interface RegisterResponse {
   lastName: string;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface VerifyEmailRequest {
+  token: string;
+}
+
+export interface ResendVerificationRequest {
+  email: string;
+}
+
+// Every account-lifecycle endpoint (forgot-password, reset-password,
+// verify-email, resend-verification) returns this same generic shape — see
+// the backend's anti-enumeration design (PasswordResetController /
+// EmailVerificationController), never a payload that would let the response
+// differ based on account existence or verification state.
+export interface AccountLifecycleMessageResponse {
+  message: string;
+}
+

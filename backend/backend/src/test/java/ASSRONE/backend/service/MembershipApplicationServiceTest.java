@@ -28,6 +28,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,10 +61,12 @@ class MembershipApplicationServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-01-15T10:00:00Z"), ZoneOffset.UTC);
+
     private MembershipApplicationService service() {
         return new MembershipApplicationService(
                 repository, mapper, userInfoRepository, passwordEncoder, eventPublisher,
-                new SecurityAuditService(new ClientIpResolver("")));
+                new SecurityAuditService(new ClientIpResolver("")), FIXED_CLOCK);
     }
 
     private static CreateMembershipApplicationRequest requeteValide(String email) {
@@ -257,6 +263,9 @@ class MembershipApplicationServiceTest {
         assertThat(userCaptor.getValue().getUsername()).isEqualTo("jean.dupont");
         assertThat(userCaptor.getValue().getRole()).isEqualTo("USER");
         assertThat(userCaptor.getValue().getPassword()).isEqualTo("mot-de-passe-hache");
+        assertThat(userCaptor.getValue().getEmailVerifiedAt())
+                .as("un compte créé par acceptation d'adhésion n'a jamais besoin de vérification email")
+                .isEqualTo(LocalDateTime.now(FIXED_CLOCK));
 
         ArgumentCaptor<MembershipApplicationAcceptedEvent> eventCaptor =
                 ArgumentCaptor.forClass(MembershipApplicationAcceptedEvent.class);

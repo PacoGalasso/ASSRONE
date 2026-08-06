@@ -27,5 +27,25 @@ services:
       timeout: 5s
       retries: 10
 
+  # Local development SMTP capture only — never used in production, and never
+  # reached by the automated test suite either (see
+  # src/test/resources/application-local.properties, which points at a host
+  # nothing listens on so a test can never depend on this container being up).
+  # application.properties' local defaults (spring.mail.host/port) already
+  # point here with no authentication required. Open http://localhost:8025 to
+  # read the password-reset/email-verification emails the running backend
+  # sends — nothing ever leaves this machine.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit-assrone
+    ports:
+      - "1025:1025" # SMTP — matches application.properties' local default port.
+      - "8025:8025" # Web UI — open in a browser to read captured emails.
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8025/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:

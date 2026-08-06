@@ -43,6 +43,9 @@ class UserInfoServiceTest {
     @Mock
     private UserMapper userMapper;
 
+    @Mock
+    private EmailVerificationService emailVerificationService;
+
     private SecurityAuditService securityAuditService;
 
     private UserInfoService service;
@@ -50,7 +53,8 @@ class UserInfoServiceTest {
     @BeforeEach
     void setUp() {
         securityAuditService = new SecurityAuditService(new ClientIpResolver(""));
-        service = new UserInfoService(repository, encoder, userMapper, Clock.systemDefaultZone(), securityAuditService);
+        service = new UserInfoService(repository, encoder, userMapper, Clock.systemDefaultZone(), securityAuditService,
+                emailVerificationService);
     }
 
     private RegisterRequest validRequest() {
@@ -74,6 +78,19 @@ class UserInfoServiceTest {
         verify(repository).findByEmail("jean.dupont@assrone.ch");
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("jean.dupont@assrone.ch");
+    }
+
+    @Test
+    void inscriptionDeclencheLenvoiDunEmailDeVerification() {
+        when(repository.findByEmail(any())).thenReturn(Optional.empty());
+        when(encoder.encode(any())).thenReturn("hash");
+        when(repository.save(any())).thenAnswer(returnsFirstArg());
+
+        service.addUser(validRequest());
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(emailVerificationService).issueTokenAndSendEmail(captor.capture());
         assertThat(captor.getValue().getEmail()).isEqualTo("jean.dupont@assrone.ch");
     }
 

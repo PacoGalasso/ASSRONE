@@ -5,10 +5,13 @@ import ASSRONE.backend.audit.SecurityEventResult;
 import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.RegisterRequest;
 import ASSRONE.backend.dto.RegisterResponse;
+import ASSRONE.backend.exception.EmailNotVerifiedException;
 import ASSRONE.backend.exception.InvalidCredentialsException;
 import ASSRONE.backend.exception.InvalidRefreshTokenException;
 import ASSRONE.backend.model.AuthRequest;
 import ASSRONE.backend.model.AuthResponse;
+import ASSRONE.backend.model.User;
+import ASSRONE.backend.repository.UserInfoRepository;
 import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.LoginAttemptService;
@@ -37,6 +40,7 @@ public class UserController {
     private static final String REFRESH_TOKEN_MISSING_MESSAGE = "Refresh token invalide ou expiré.";
 
     private final UserInfoService service;
+    private final UserInfoRepository userInfoRepository;
     private final RefreshTokenService refreshTokenService;
     private final AuthenticationManager authenticationManager;
     private final LoginAttemptService loginAttemptService;
@@ -69,6 +73,20 @@ public class UserController {
         } catch (AuthenticationException ex) {
             recordFailedLogin(normalizedEmail, ex);
             throw new InvalidCredentialsException("Email ou mot de passe incorrect.");
+        }
+
+        // Checked only after credentials already matched: at this point the
+        // caller has already proven they know the account's password, so
+        // naming the real reason here (unlike a bad password) opens no new
+        // account-enumeration channel. Deliberately not routed through
+        // recordFailedLogin/loginAttemptService — a correct password must
+        // never count toward this account's lockout threshold.
+        User user = userInfoRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new InvalidCredentialsException("Email ou mot de passe incorrect."));
+        if (user.getEmailVerifiedAt() == null) {
+            securityAuditService.record(SecurityEventType.LOGIN_FAILURE, SecurityEventResult.DENIED,
+                    String.valueOf(user.getId()), null, "user", String.valueOf(user.getId()), "EMAIL_NOT_VERIFIED");
+            throw new EmailNotVerifiedException("Veuillez vérifier votre adresse email avant de vous connecter.");
         }
 
         loginAttemptService.resetFailedAttempts(normalizedEmail);

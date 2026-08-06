@@ -35,6 +35,9 @@ export interface UpdateProfileRequest {
   firstName: string;
   lastName: string;
   email: string;
+  // Required by the backend only when email differs from the account's
+  // current one — see UserProfileService#updateProfile.
+  currentPassword?: string;
 }
 
 export interface ChangePasswordRequest {

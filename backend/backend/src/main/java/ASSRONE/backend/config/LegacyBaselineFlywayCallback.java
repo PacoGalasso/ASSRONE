@@ -31,14 +31,14 @@ import java.sql.Statement;
  * Hibernate's schema validation failed on it specifically (see
  * EventRegistrationsBaselineIntegrationTest for the regression coverage).
  *
- * <p><b>Why a callback, not a new migration</b>: V1 through V8 are already
+ * <p><b>Why a callback, not a new migration</b>: V1 through V11 are already
  * applied, checksummed, and recorded in flyway_schema_history on every
  * real database this application runs on (production, and any developer's
  * already-bootstrapped local database). Editing any of their contents
  * would change their checksum and fail validation everywhere they've
  * already run; inserting a new migration numbered before V1 is equally
  * unsafe — Flyway's default (and this project's) configuration does not
- * apply out-of-order migrations, so a new V0.x introduced after V1..V8
+ * apply out-of-order migrations, so a new V0.x introduced after V1..V11
  * are already recorded would either be silently ignored or rejected,
  * neither of which is the "runs before V1" guarantee actually needed. A
  * BEFORE_MIGRATE callback runs immediately before Flyway applies any

@@ -1,5 +1,5 @@
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {Router, provideRouter} from '@angular/router';
+import {ActivatedRoute, Router, convertToParamMap, provideRouter} from '@angular/router';
 import {of, throwError} from 'rxjs';
 
 import {Login} from './login';
@@ -11,7 +11,7 @@ describe('Login', () => {
   let authServiceMock: { login: ReturnType<typeof vi.fn> };
   let router: Router;
 
-  async function setup() {
+  async function setup(queryParams: Record<string, string> = {}) {
     authServiceMock = {login: vi.fn()};
 
     await TestBed.configureTestingModule({
@@ -19,6 +19,10 @@ describe('Login', () => {
       providers: [
         provideRouter([]),
         {provide: AuthService, useValue: authServiceMock},
+        {
+          provide: ActivatedRoute,
+          useValue: {snapshot: {queryParamMap: convertToParamMap(queryParams)}},
+        },
       ],
     }).compileComponents();
 
@@ -82,5 +86,53 @@ describe('Login', () => {
     // #then
     expect(component.errorMessage).toBe('Email ou mot de passe incorrect.');
     expect(component.isLoading).toBe(false);
+  });
+
+  it('should show the post-reset success message when arriving with passwordReset=1', async () => {
+    // #given / #when
+    await setup({passwordReset: '1'});
+
+    // #then
+    expect(component.passwordResetSuccess).toBe(true);
+  });
+
+  it('should not show the post-reset success message on a normal visit', async () => {
+    // #given / #when
+    await setup();
+
+    // #then
+    expect(component.passwordResetSuccess).toBe(false);
+  });
+
+  it('should show a precise message and offer resending verification on a 403 EMAIL_NOT_VERIFIED', async () => {
+    // #given
+    await setup();
+    authServiceMock.login.mockReturnValue(
+      throwError(() => ({status: 403, error: {error: 'Veuillez vérifier votre adresse email avant de vous connecter.'}}))
+    );
+    component.loginForm.setValue({email: 'membre@assrone.ch', password: 'motdepasse123'});
+
+    // #when
+    component.onSubmit();
+
+    // #then
+    expect(component.emailNotVerified).toBe(true);
+    expect(component.errorMessage).toBe('Veuillez vérifier votre adresse email avant de vous connecter.');
+  });
+
+  it('should not flag emailNotVerified on a plain 401 bad-credentials error', async () => {
+    // #given
+    await setup();
+    authServiceMock.login.mockReturnValue(
+      throwError(() => ({status: 401, error: {error: 'Email ou mot de passe incorrect.'}}))
+    );
+    component.loginForm.setValue({email: 'membre@assrone.ch', password: 'mauvais-mot-de-passe'});
+
+    // #when
+    component.onSubmit();
+
+    // #then
+    expect(component.emailNotVerified).toBe(false);
+    expect(component.errorMessage).toBe('Email ou mot de passe incorrect.');
   });
 });

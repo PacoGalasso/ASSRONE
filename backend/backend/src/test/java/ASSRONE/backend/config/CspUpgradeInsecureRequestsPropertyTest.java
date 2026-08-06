@@ -41,6 +41,13 @@ class CspUpgradeInsecureRequestsPropertyTest {
                         "spring.mail.port=2525",
                         "spring.mail.username=test@example.invalid",
                         "spring.mail.password=test-password-not-real",
+                        // application-production.properties resolves spring.mail.host/
+                        // password from these SMTP_* env-var-style keys — see
+                        // ProductionStartupSafetyTest for the full rationale.
+                        "SMTP_HOST=localhost",
+                        "SMTP_PORT=2525",
+                        "SMTP_USERNAME=test@example.invalid",
+                        "SMTP_PASSWORD=test-password-not-real",
                         "app.upload-dir=target/csp-property-test-uploads",
                         "app.contact.recipient=test@example.invalid"
                 );

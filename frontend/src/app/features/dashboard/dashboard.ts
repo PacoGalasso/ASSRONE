@@ -19,7 +19,7 @@ export class Dashboard implements OnInit {
 
   ngOnInit(): void {
     if (!this.authService.getToken()) {
-      this.router.navigate(['/auth/login']);
+      this.router.navigate(['/login']);
     }
   }
 

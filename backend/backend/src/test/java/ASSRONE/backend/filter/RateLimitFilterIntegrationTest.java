@@ -8,7 +8,9 @@ import ASSRONE.backend.controller.UserController;
 import ASSRONE.backend.dto.EventDto;
 import ASSRONE.backend.dto.MembershipApplicationDto;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
+import ASSRONE.backend.model.User;
 import ASSRONE.backend.ratelimit.RateLimiterService;
+import ASSRONE.backend.repository.UserInfoRepository;
 import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.security.RefreshCookieFactory;
 import ASSRONE.backend.service.ContactEmailService;
@@ -27,7 +29,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -61,6 +65,18 @@ class RateLimitFilterIntegrationTest {
     void setUp() {
         authenticationManager = mock(AuthenticationManager.class);
         UserInfoService userInfoService = mock(UserInfoService.class);
+        UserInfoRepository userInfoRepository = mock(UserInfoRepository.class);
+        // Every login test in this class exercises the rate limiter, not the
+        // email-verified-before-login policy — a verified stand-in for any
+        // requested email keeps the successful-authentication path reachable
+        // without each test having to know about it.
+        when(userInfoRepository.findByEmail(any())).thenAnswer(invocation -> {
+            User user = new User();
+            user.setId(1L);
+            user.setEmail(invocation.getArgument(0));
+            user.setEmailVerifiedAt(LocalDateTime.now());
+            return Optional.of(user);
+        });
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
         when(refreshTokenService.issueTokens(any(), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
@@ -77,8 +93,9 @@ class RateLimitFilterIntegrationTest {
                 new SecurityAuditService(clientIpResolver));
 
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory("refresh_token", false, "Lax", "/auth");
-        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager,
-                loginAttemptService, refreshCookieFactory, new SecurityAuditService(clientIpResolver), clientIpResolver);
+        UserController userController = new UserController(userInfoService, userInfoRepository, refreshTokenService,
+                authenticationManager, loginAttemptService, refreshCookieFactory,
+                new SecurityAuditService(clientIpResolver), clientIpResolver);
         ContactController contactController = new ContactController(contactEmailService);
         MembershipApplicationController membershipApplicationController =
                 new MembershipApplicationController(membershipApplicationService);
@@ -271,14 +288,23 @@ class RateLimitFilterIntegrationTest {
                 new SecurityAuditService(clientIpResolver));
 
         UserInfoService userInfoService = mock(UserInfoService.class);
+        UserInfoRepository userInfoRepository = mock(UserInfoRepository.class);
+        when(userInfoRepository.findByEmail(any())).thenAnswer(invocation -> {
+            User user = new User();
+            user.setId(1L);
+            user.setEmail(invocation.getArgument(0));
+            user.setEmailVerifiedAt(LocalDateTime.now());
+            return Optional.of(user);
+        });
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
         when(refreshTokenService.issueTokens(any(), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory("refresh_token", false, "Lax", "/auth");
-        UserController userController = new UserController(userInfoService, refreshTokenService, authenticationManager,
-                loginAttemptService, refreshCookieFactory, new SecurityAuditService(clientIpResolver), clientIpResolver);
+        UserController userController = new UserController(userInfoService, userInfoRepository, refreshTokenService,
+                authenticationManager, loginAttemptService, refreshCookieFactory,
+                new SecurityAuditService(clientIpResolver), clientIpResolver);
 
         return MockMvcBuilders
                 .standaloneSetup(userController)

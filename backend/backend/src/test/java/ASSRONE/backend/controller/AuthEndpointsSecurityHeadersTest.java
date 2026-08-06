@@ -9,6 +9,7 @@ import ASSRONE.backend.filter.CorrelationIdFilter;
 import ASSRONE.backend.filter.JwtAuthFilter;
 import ASSRONE.backend.filter.RateLimitFilter;
 import ASSRONE.backend.ratelimit.RateLimiterService;
+import ASSRONE.backend.repository.UserInfoRepository;
 import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.security.OriginValidator;
 import ASSRONE.backend.security.RefreshCookieFactory;
@@ -65,6 +66,8 @@ class AuthEndpointsSecurityHeadersTest {
 
     @MockitoBean
     private UserInfoService userInfoService;
+    @MockitoBean
+    private UserInfoRepository userInfoRepository;
     @MockitoBean
     private AuthenticationManager authenticationManager;
     @MockitoBean

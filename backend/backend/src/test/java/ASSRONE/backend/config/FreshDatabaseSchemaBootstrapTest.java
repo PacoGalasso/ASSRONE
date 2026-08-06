@@ -103,7 +103,16 @@ class FreshDatabaseSchemaBootstrapTest {
 
     private static final List<String> EXPECTED_TABLES = List.of(
             "users", "membership_applications", "events", "event_registrations",
-            "documents", "committee_members", "refresh_tokens", "user_sessions");
+            "documents", "committee_members", "refresh_tokens", "user_sessions",
+            "password_reset_tokens", "email_verification_tokens");
+
+    // V1..V8 are the pre-existing baseline (see LegacyBaselineFlywayCallback);
+    // V9-V11 are this lot's own migrations. Listed explicitly, not just
+    // counted, so a future migration that silently fails to apply (rather
+    // than being absent) still fails this test on the missing version number,
+    // not just on a stale count nobody remembered to update.
+    private static final List<String> EXPECTED_MIGRATION_VERSIONS =
+            List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11");
 
     @Test
     void demarrageSurBaseViergeReussitAvecToutesLesTablesEtContraintesAttendues() {
@@ -116,14 +125,18 @@ class FreshDatabaseSchemaBootstrapTest {
             assertThat(count).as("table " + table).isEqualTo(1);
         }
 
-        Integer migrationsApplied = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = true AND version IS NOT NULL", Integer.class);
-        assertThat(migrationsApplied).isEqualTo(8);
+        List<String> appliedVersions = jdbcTemplate.queryForList(
+                "SELECT version FROM flyway_schema_history WHERE success = true AND version IS NOT NULL ORDER BY installed_rank",
+                String.class);
+        assertThat(appliedVersions).as("every migration from V1 to V11 applied, in order, none skipped or failed")
+                .containsExactlyElementsOf(EXPECTED_MIGRATION_VERSIONS);
 
         assertForeignKey("event_registrations", "events");
         assertForeignKey("refresh_tokens", "users");
         assertForeignKey("refresh_tokens", "user_sessions");
         assertForeignKey("user_sessions", "users");
+        assertForeignKey("password_reset_tokens", "users");
+        assertForeignKey("email_verification_tokens", "users");
 
         assertNotNullColumn("users", "email");
         assertNotNullColumn("event_registrations", "event_id");
@@ -131,6 +144,25 @@ class FreshDatabaseSchemaBootstrapTest {
         assertNotNullColumn("refresh_tokens", "session_id");
         assertNotNullColumn("user_sessions", "public_id");
         assertNotNullColumn("documents", "stored_filename");
+
+        // email_verified_at is deliberately nullable — see V9 (unverified is a
+        // real, valid state for a newly registered account) — so this only
+        // confirms the column exists, never that it's NOT NULL.
+        assertColumnExists("users", "email_verified_at");
+
+        assertNotNullColumn("password_reset_tokens", "user_id");
+        assertNotNullColumn("password_reset_tokens", "token_hash");
+        assertNotNullColumn("password_reset_tokens", "expires_at");
+        assertUniqueIndex("password_reset_tokens", "uk_password_reset_tokens_token_hash");
+        assertIndexExists("password_reset_tokens", "idx_password_reset_tokens_user_id");
+        assertIndexExists("password_reset_tokens", "idx_password_reset_tokens_expires_at");
+
+        assertNotNullColumn("email_verification_tokens", "user_id");
+        assertNotNullColumn("email_verification_tokens", "token_hash");
+        assertNotNullColumn("email_verification_tokens", "expires_at");
+        assertUniqueIndex("email_verification_tokens", "uk_email_verification_tokens_token_hash");
+        assertIndexExists("email_verification_tokens", "idx_email_verification_tokens_user_id");
+        assertIndexExists("email_verification_tokens", "idx_email_verification_tokens_expires_at");
     }
 
     @Test
@@ -166,5 +198,26 @@ class FreshDatabaseSchemaBootstrapTest {
                 "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ? AND column_name = ?",
                 String.class, table, column);
         assertThat(isNullable).as(table + "." + column + " nullability").isEqualTo("NO");
+    }
+
+    private void assertColumnExists(String table, String column) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ? AND column_name = ?",
+                Integer.class, table, column);
+        assertThat(count).as(table + "." + column + " exists").isEqualTo(1);
+    }
+
+    private void assertUniqueIndex(String table, String indexName) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM pg_indexes WHERE tablename = ? AND indexname = ? AND indexdef ILIKE 'CREATE UNIQUE%'",
+                Integer.class, table, indexName);
+        assertThat(count).as(table + "." + indexName + " unique index").isEqualTo(1);
+    }
+
+    private void assertIndexExists(String table, String indexName) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM pg_indexes WHERE tablename = ? AND indexname = ?",
+                Integer.class, table, indexName);
+        assertThat(count).as(table + "." + indexName + " index").isEqualTo(1);
     }
 }
