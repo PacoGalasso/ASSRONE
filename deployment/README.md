@@ -63,10 +63,28 @@ for the full reasoning.
 
 See `backend/backend/.env.example` for the authoritative, actively-maintained
 list with generation instructions. At minimum: `SPRING_PROFILES_ACTIVE=production`,
-`SPRING_DATASOURCE_URL/USERNAME/PASSWORD`, `JWT_SECRET`, `SMTP_PASSWORD`,
-`CORS_ALLOWED_ORIGINS`. `ProductionSecurityGuard` and `CorsProperties` refuse to
-let the application start if the security-critical ones are absent, empty, or
-manifestly unsafe.
+`SPRING_DATASOURCE_URL/USERNAME/PASSWORD`, `JWT_SECRET`, `SMTP_HOST/PORT/USERNAME/PASSWORD`,
+`CORS_ALLOWED_ORIGINS`, `ACCOUNT_LIFECYCLE_FRONTEND_URL`. `ProductionSecurityGuard` and
+`CorsProperties` refuse to let the application start if the security-critical ones are
+absent, empty, or manifestly unsafe — this now includes the SMTP host and password: a
+production deployment that forgets to set them fails to start rather than silently
+running with no working password-reset/email-verification delivery.
+
+## Local development SMTP (Mailpit)
+
+`docker-compose.yml` (repository root of `backend/backend`) includes a `mailpit`
+service alongside the local Postgres container. `application.properties`' local
+defaults already point at it (`localhost:1025`, no authentication) — running
+`docker compose up` and then the backend normally is enough; no `.env` changes
+needed. Open `http://localhost:8025` to read the password-reset and
+email-verification emails the running backend actually sends, without any real
+SMTP account and without anything ever leaving the machine. The automated test
+suite never depends on this container (see
+`src/test/resources/application-local.properties`, which points at a host
+nothing listens on, and the account-lifecycle service/controller tests, which
+mock `JavaMailSender`/the mail-sending services directly) — Mailpit exists
+purely for a human manually exercising the forgot-password/verify-email flows
+in a browser.
 
 ## JWT secret rotation
 

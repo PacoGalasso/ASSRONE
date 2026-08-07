@@ -59,6 +59,13 @@ public class User {
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
 
+    // Null means "not yet verified". Backfilled to createdAt for every
+    // account that existed before this column was introduced (see V9), so
+    // deployment never locks out an already-active member; only accounts
+    // created afterward start out null and must complete verification.
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

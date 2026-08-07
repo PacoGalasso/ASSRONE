@@ -65,12 +65,21 @@ class AvatarMissingFileSessionIntegrationTest {
     // Inserted via raw JDBC, deliberately bypassing the repository/entity
     // layer: this only needs a row present before the real HTTP login flow
     // takes over, and avoids pulling in the full user-registration path.
+    //
+    // email_verified_at is set explicitly to now(): this fixture exists to
+    // exercise the login/refresh/avatar path end to end, not the email
+    // verification gate — an unverified account here would fail at the very
+    // first login call with EmailNotVerifiedException before ever reaching
+    // the avatar/refresh behavior this test is actually about. A real new
+    // registration is deliberately NOT auto-verified this way (see
+    // UserInfoService#addUser); this is a historical-account fixture, not a
+    // simulation of the registration flow.
     private void seedUser() throws Exception {
         try (Connection conn = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
              Statement statement = conn.createStatement()) {
             statement.execute("""
-                    INSERT INTO users (email, password, username, role, is_active, created_at, updated_at, avatar_filename)
-                    VALUES ('%s', '%s', 'avatar-session', 'USER', true, now(), now(), '%s')
+                    INSERT INTO users (email, password, username, role, is_active, created_at, updated_at, avatar_filename, email_verified_at)
+                    VALUES ('%s', '%s', 'avatar-session', 'USER', true, now(), now(), '%s', now())
                     """.formatted(EMAIL, passwordEncoder.encode(PASSWORD), ORPHAN_AVATAR));
         }
     }
@@ -98,8 +107,13 @@ class AvatarMissingFileSessionIntegrationTest {
 
         // The refresh cookie set at login (carried automatically by the
         // CookieManager) still rotates successfully — proving the avatar 404
-        // in between never touched the session or the refresh token.
+        // in between never touched the session or the refresh token. Origin
+        // is required here: AuthCookieOriginFilter rejects /auth/refresh
+        // outright when both Origin and Referer are absent (see
+        // AuthCookieOriginFilterIntegrationTest#refreshSansOrigineNiRefererRecoit403),
+        // which a browser never triggers but a raw HttpClient call does.
         HttpRequest refreshRequest = HttpRequest.newBuilder(URI.create(baseUrl() + "/auth/refresh"))
+                .header("Origin", "http://localhost:4200")
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
         HttpResponse<String> refreshResponse = client.send(refreshRequest, HttpResponse.BodyHandlers.ofString());

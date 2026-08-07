@@ -20,4 +20,9 @@ public class UpdateProfileRequest {
     @NotBlank(message = "L'email est obligatoire")
     @Email(message = "Format d'email invalide")
     private String email;
+
+    // Required only when the submitted email differs from the account's
+    // current one — see UserProfileService#updateProfile. Left blank for a
+    // no-op or non-email profile update.
+    private String currentPassword;
 }

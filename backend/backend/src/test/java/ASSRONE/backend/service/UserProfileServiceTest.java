@@ -1,5 +1,8 @@
 package ASSRONE.backend.service;
 
+import ASSRONE.backend.audit.SecurityAuditService;
+import ASSRONE.backend.audit.SecurityEventResult;
+import ASSRONE.backend.audit.SecurityEventType;
 import ASSRONE.backend.dto.ChangePasswordRequest;
 import ASSRONE.backend.dto.UpdateProfileRequest;
 import ASSRONE.backend.exception.InvalidAvatarException;
@@ -31,6 +34,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -50,6 +54,8 @@ class UserProfileServiceTest {
     private PasswordEncoder passwordEncoder;
 
     private RefreshTokenService refreshTokenService;
+    private SecurityAuditService securityAuditService;
+    private EmailVerificationService emailVerificationService;
 
     @TempDir
     private Path uploadDir;
@@ -59,7 +65,10 @@ class UserProfileServiceTest {
     @BeforeEach
     void setUp() {
         refreshTokenService = mock(RefreshTokenService.class);
-        service = new UserProfileService(userRepository, userProfileMapper, passwordEncoder, new AvatarImageInspector(), refreshTokenService);
+        securityAuditService = mock(SecurityAuditService.class);
+        emailVerificationService = mock(EmailVerificationService.class);
+        service = new UserProfileService(userRepository, userProfileMapper, passwordEncoder, new AvatarImageInspector(),
+                refreshTokenService, securityAuditService, emailVerificationService);
         ReflectionTestUtils.setField(service, "uploadDir", uploadDir.toString());
     }
 
@@ -169,11 +178,13 @@ class UserProfileServiceTest {
         autreCompte.setEmail("dejapris@assrone.ch");
         when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
         when(userRepository.findByEmail("dejapris@assrone.ch")).thenReturn(Optional.of(autreCompte));
+        when(passwordEncoder.matches("bon-mot-de-passe", user.getPassword())).thenReturn(true);
         UpdateProfileRequest request = UpdateProfileRequest.builder()
                 .username("membre")
                 .firstName("Jean")
                 .lastName("Dupont")
                 .email("dejapris@assrone.ch")
+                .currentPassword("bon-mot-de-passe")
                 .build();
 
         assertThatThrownBy(() -> service.updateProfile("membre@assrone.ch", request))
@@ -200,6 +211,112 @@ class UserProfileServiceTest {
         // Aucune recherche de doublon puisque l'email normalisé est identique.
         verify(userRepository, Mockito.times(1)).findByEmail("membre@assrone.ch");
         verify(userRepository).save(any());
+    }
+
+    // ===== Changement d'email (Partie 5, lot account-lifecycle) =====
+
+    @Test
+    void changementDEmailSansMotDePasseActuelEstRefuse() {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .username("membre")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .email("nouveau@assrone.ch")
+                .build();
+
+        assertThatThrownBy(() -> service.updateProfile("membre@assrone.ch", request))
+                .isInstanceOf(InvalidPasswordException.class);
+
+        verify(userRepository, never()).save(any());
+        verifyNoInteractions(refreshTokenService, emailVerificationService);
+    }
+
+    @Test
+    void changementDEmailAvecMauvaisMotDePasseActuelEstRefuse() {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("mauvais-mot-de-passe", user.getPassword())).thenReturn(false);
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .username("membre")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .email("nouveau@assrone.ch")
+                .currentPassword("mauvais-mot-de-passe")
+                .build();
+
+        assertThatThrownBy(() -> service.updateProfile("membre@assrone.ch", request))
+                .isInstanceOf(InvalidPasswordException.class);
+
+        verify(userRepository, never()).save(any());
+        verifyNoInteractions(refreshTokenService, emailVerificationService);
+    }
+
+    @Test
+    void changementDEmailValideMetLaNouvelleAdresseNonVerifiee() {
+        User user = existingUser();
+        user.setEmailVerifiedAt(java.time.LocalDateTime.now());
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("nouveau@assrone.ch")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches("bon-mot-de-passe", user.getPassword())).thenReturn(true);
+        when(userRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .username("membre")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .email("nouveau@assrone.ch")
+                .currentPassword("bon-mot-de-passe")
+                .build();
+
+        service.updateProfile("membre@assrone.ch", request);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("nouveau@assrone.ch");
+        assertThat(captor.getValue().getEmailVerifiedAt()).isNull();
+    }
+
+    @Test
+    void changementDEmailValideRevoqueToutesLesSessionsEtEnvoieUnNouveauLienDeVerification() {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("nouveau@assrone.ch")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches("bon-mot-de-passe", user.getPassword())).thenReturn(true);
+        when(userRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .username("membre")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .email("nouveau@assrone.ch")
+                .currentPassword("bon-mot-de-passe")
+                .build();
+
+        service.updateProfile("membre@assrone.ch", request);
+
+        verify(refreshTokenService).revokeAllForUser(1L);
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(emailVerificationService).issueTokenAndSendEmail(captor.capture(), eq("EMAIL_CHANGED"));
+        assertThat(captor.getValue().getEmail()).isEqualTo("nouveau@assrone.ch");
+        verify(securityAuditService).record(SecurityEventType.EMAIL_CHANGE_REQUESTED, SecurityEventResult.SUCCESS,
+                "1", null, "user", "1", null);
+    }
+
+    @Test
+    void changementDEmailSansToucherAuMotDePasseNeRevoqueAucuneSessionEtNenvoieAucunEmail() {
+        User user = existingUser();
+        when(userRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(user));
+        when(userRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .username("nouveau-pseudo")
+                .firstName("Jean")
+                .lastName("Dupont")
+                .email("membre@assrone.ch")
+                .build();
+
+        service.updateProfile("membre@assrone.ch", request);
+
+        verifyNoInteractions(refreshTokenService, emailVerificationService);
     }
 
     // ===== Upload d'avatar =====

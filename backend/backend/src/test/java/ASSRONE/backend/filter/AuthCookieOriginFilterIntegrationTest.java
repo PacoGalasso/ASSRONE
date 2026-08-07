@@ -4,6 +4,8 @@ import ASSRONE.backend.audit.AuditLogCapture;
 import ASSRONE.backend.audit.SecurityAuditService;
 import ASSRONE.backend.controller.UserController;
 import ASSRONE.backend.exception.GlobalExceptionHandler;
+import ASSRONE.backend.model.User;
+import ASSRONE.backend.repository.UserInfoRepository;
 import ASSRONE.backend.security.ClientIpResolver;
 import ASSRONE.backend.security.OriginValidator;
 import ASSRONE.backend.security.RefreshCookieFactory;
@@ -23,7 +25,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +51,7 @@ class AuthCookieOriginFilterIntegrationTest {
 
     private AuthenticationManager authenticationManager;
     private RefreshTokenService refreshTokenService;
+    private UserInfoRepository userInfoRepository;
     private AuthCookieOriginFilter filter;
     private MockMvc mockMvc;
 
@@ -54,14 +59,15 @@ class AuthCookieOriginFilterIntegrationTest {
     void setUp() {
         authenticationManager = mock(AuthenticationManager.class);
         UserInfoService userInfoService = mock(UserInfoService.class);
+        userInfoRepository = mock(UserInfoRepository.class);
         refreshTokenService = mock(RefreshTokenService.class);
         LoginAttemptService loginAttemptService = mock(LoginAttemptService.class);
         RefreshCookieFactory refreshCookieFactory = new RefreshCookieFactory(REFRESH_COOKIE_NAME, false, "Lax", "/auth");
         ClientIpResolver clientIpResolver = new ClientIpResolver("");
         SecurityAuditService securityAuditService = new SecurityAuditService(clientIpResolver);
         UserController userController = new UserController(
-                userInfoService, refreshTokenService, authenticationManager, loginAttemptService, refreshCookieFactory,
-                securityAuditService, clientIpResolver);
+                userInfoService, userInfoRepository, refreshTokenService, authenticationManager, loginAttemptService,
+                refreshCookieFactory, securityAuditService, clientIpResolver);
 
         filter = new AuthCookieOriginFilter(new OriginValidator(ALLOWED_ORIGINS), securityAuditService);
 
@@ -225,6 +231,11 @@ class AuthCookieOriginFilterIntegrationTest {
         UsernamePasswordAuthenticationToken authentifie = new UsernamePasswordAuthenticationToken(
                 "membre@assrone.ch", null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
         when(authenticationManager.authenticate(any())).thenReturn(authentifie);
+        User verifie = new User();
+        verifie.setId(1L);
+        verifie.setEmail("membre@assrone.ch");
+        verifie.setEmailVerifiedAt(LocalDateTime.now());
+        when(userInfoRepository.findByEmail("membre@assrone.ch")).thenReturn(Optional.of(verifie));
         when(refreshTokenService.issueTokens(any(), any(), any())).thenReturn(
                 new RefreshTokenService.IssuedTokens("access-token", "refresh-token", "ROLE_USER", "membre@assrone.ch",
                         Duration.ofDays(7), 1L));

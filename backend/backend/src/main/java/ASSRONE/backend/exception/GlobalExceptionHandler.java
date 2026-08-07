@@ -43,6 +43,24 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(EmailNotVerifiedException.class)
+    public ResponseEntity<Map<String, String>> handleEmailNotVerified(EmailNotVerifiedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidPasswordResetTokenException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidPasswordResetToken(InvalidPasswordResetTokenException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidEmailVerificationTokenException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidEmailVerificationToken(InvalidEmailVerificationTokenException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     // Always clears the refresh cookie, not just on an explicit logout: a
     // refresh token that just failed rotation (expired, revoked, reused,
     // wrong type, malformed...) is definitionally unusable, and leaving a

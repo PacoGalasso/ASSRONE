@@ -36,15 +36,17 @@ public class UserInfoService implements UserDetailsService {
     private final UserMapper userMapper;
     private final Clock clock;
     private final SecurityAuditService securityAuditService;
+    private final EmailVerificationService emailVerificationService;
 
     @Autowired
     public UserInfoService(UserInfoRepository repository, PasswordEncoder encoder, UserMapper userMapper, Clock clock,
-                            SecurityAuditService securityAuditService) {
+                            SecurityAuditService securityAuditService, EmailVerificationService emailVerificationService) {
         this.repository = repository;
         this.encoder = encoder;
         this.userMapper = userMapper;
         this.clock = clock;
         this.securityAuditService = securityAuditService;
+        this.emailVerificationService = emailVerificationService;
     }
 
     // Method to load user details by username (email)
@@ -101,6 +103,8 @@ public class UserInfoService implements UserDetailsService {
         securityAuditService.record(SecurityEventType.USER_CREATED, SecurityEventResult.SUCCESS,
                 String.valueOf(saved.getId()), "ROLE_" + saved.getRole().toUpperCase(Locale.ROOT),
                 "user", String.valueOf(saved.getId()), "SELF_REGISTRATION");
+
+        emailVerificationService.issueTokenAndSendEmail(saved);
 
         return RegisterResponse.builder()
                 .id(saved.getId())

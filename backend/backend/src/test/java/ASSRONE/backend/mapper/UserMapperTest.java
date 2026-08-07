@@ -33,6 +33,7 @@ class UserMapperTest {
         assertThat(entity.getLastLogin()).isNull();
         assertThat(entity.getFailedLoginAttempts()).isZero();
         assertThat(entity.getLockedUntil()).isNull();
+        assertThat(entity.getEmailVerifiedAt()).isNull();
     }
 
     @Test

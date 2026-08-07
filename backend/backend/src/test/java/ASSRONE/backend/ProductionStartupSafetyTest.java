@@ -59,6 +59,15 @@ class ProductionStartupSafetyTest {
                         "spring.mail.port=2525",
                         "spring.mail.username=test@example.invalid",
                         "spring.mail.password=test-password-not-real",
+                        // application-production.properties resolves spring.mail.host/
+                        // password from these SMTP_* env-var-style keys (see there); the
+                        // spring.mail.* keys just above cover the "local" profile scenario
+                        // (application.properties' own ${SMTP_HOST:localhost}-style
+                        // defaults), which never reads these SMTP_* keys at all.
+                        "SMTP_HOST=localhost",
+                        "SMTP_PORT=2525",
+                        "SMTP_USERNAME=test@example.invalid",
+                        "SMTP_PASSWORD=test-password-not-real",
                         "app.upload-dir=target/production-startup-safety-test-uploads",
                         "app.contact.recipient=test@example.invalid"
                 );

@@ -62,6 +62,20 @@
                  class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
         </div>
 
+        @if (infoForm.controls.email.value.trim().toLowerCase() !== (profile()?.email ?? '').trim().toLowerCase()) {
+          <div>
+            <label class="block text-sm font-medium text-[#122347] mb-1.5">Mot de passe actuel</label>
+            <input type="password" formControlName="currentPassword" autocomplete="current-password"
+                   class="w-full border border-[#E3E1DC] rounded-md px-3 py-2.5 focus:outline-none focus:border-[#122347]"/>
+            <p class="text-sm text-[#5C5F66] mt-1">
+              Requis pour changer d'adresse email. Toutes vos sessions seront déconnectées et vous devrez vérifier la nouvelle adresse.
+            </p>
+            @if (infoForm.errors?.['currentPasswordRequired'] && infoForm.controls.currentPassword.touched) {
+              <p class="text-sm text-red-600 mt-1">Mot de passe actuel requis.</p>
+            }
+          </div>
+        }
+
         @if (infoError()) {
           <p class="text-sm text-red-600">{{ infoError() }}</p>
         }
@@ -109,7 +123,7 @@
           <p class="text-sm text-red-600">{{ passwordError() }}</p>
         }
         @if (passwordSuccess()) {
-          <p class="text-sm text-green-700">Mot de passe modifié avec succès.</p>
+          <p class="text-sm text-green-700">Mot de passe modifié avec succès. Reconnexion nécessaire...</p>
         }
 
         <button type="submit" [disabled]="savingPassword()"

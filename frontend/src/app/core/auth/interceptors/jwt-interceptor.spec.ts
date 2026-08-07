@@ -82,6 +82,24 @@ describe('JwtInterceptor', () => {
     req.flush({});
   });
 
+  it('should never attempt a refresh for a 403 EMAIL_NOT_VERIFIED on /auth/generateToken', () => {
+    // #given
+    const logoutSpy = vi.spyOn(authService, 'logout').mockImplementation(() => {});
+    let receivedError: unknown;
+
+    // #when
+    http.post('/auth/generateToken', {}).subscribe({error: (err) => receivedError = err});
+
+    // #then
+    httpMock.expectOne('/auth/generateToken')
+      .flush({error: 'Veuillez vérifier votre adresse email avant de vous connecter.'},
+        {status: 403, statusText: 'Forbidden'});
+
+    expect(receivedError).toBeTruthy();
+    expect(logoutSpy).not.toHaveBeenCalled();
+    httpMock.expectNone('/auth/refresh');
+  });
+
   it('should not attach a bearer token to /auth/refresh and must not intercept its own 401', () => {
     // #given
     loginWith('access-token');
@@ -219,6 +237,52 @@ describe('JwtInterceptor', () => {
     expect(receivedError).toBeTruthy();
     expect(logoutSpy).not.toHaveBeenCalled();
     httpMock.expectNone('/auth/refresh');
+  });
+
+  it.each([
+    ['/auth/forgot-password', 400],
+    ['/auth/reset-password', 400],
+    ['/auth/reset-password', 404],
+    ['/auth/reset-password', 410],
+    ['/auth/verify-email', 400],
+    ['/auth/verify-email', 410],
+    ['/auth/resend-verification', 429],
+  ])(
+    'should never attempt a refresh or logout for a %s error on %s — these are public, token-based endpoints',
+    (path, status) => {
+      // #given
+      loginWith('access-token');
+      const logoutSpy = vi.spyOn(authService, 'logout').mockImplementation(() => {});
+      let receivedError: unknown;
+
+      // #when
+      http.post(path, {}).subscribe({error: (err) => receivedError = err});
+
+      // #then
+      httpMock.expectOne(path).flush({error: 'invalide'}, {status, statusText: 'Error'});
+
+      expect(receivedError).toBeTruthy();
+      expect(logoutSpy).not.toHaveBeenCalled();
+      httpMock.expectNone('/auth/refresh');
+    }
+  );
+
+  it('should not attach a bearer token to the 4 public account-lifecycle endpoints', () => {
+    // #given
+    loginWith('access-token');
+
+    // #when
+    http.post('/auth/forgot-password', {}).subscribe();
+    http.post('/auth/reset-password', {}).subscribe();
+    http.post('/auth/verify-email', {}).subscribe();
+    http.post('/auth/resend-verification', {}).subscribe();
+
+    // #then
+    for (const path of ['/auth/forgot-password', '/auth/reset-password', '/auth/verify-email', '/auth/resend-verification']) {
+      const req = httpMock.expectOne(path);
+      expect(req.request.headers.has('Authorization')).toBe(false);
+      req.flush({message: 'ok'});
+    }
   });
 
   it('should also error out queued requests, instead of hanging, when the shared refresh fails', () => {

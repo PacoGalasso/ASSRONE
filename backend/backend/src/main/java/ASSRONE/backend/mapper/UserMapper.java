@@ -21,5 +21,6 @@ public interface UserMapper {
     @Mapping(target = "lastLogin", ignore = true)
     @Mapping(target = "failedLoginAttempts", ignore = true)
     @Mapping(target = "lockedUntil", ignore = true)
+    @Mapping(target = "emailVerifiedAt", ignore = true)
     User toEntity(UserDto userDto);
 }

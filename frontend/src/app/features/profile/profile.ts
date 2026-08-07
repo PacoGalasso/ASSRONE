@@ -2,6 +2,7 @@
 import {Component, computed, inject, OnInit, signal} from '@angular/core';
 import {AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators} from '@angular/forms';
 import {ProfileService} from '../../core/auth/services/profile-service';
+import {AuthService} from '../../core/auth/services/auth-service';
 import {UserProfile} from '../../core/auth/models/profile.model';
 import {DatePipe} from '@angular/common';
 import {ProfileSessions} from './sessions/profile-sessions';
@@ -37,13 +38,18 @@ export class Profile implements OnInit {
     return `${p.firstName?.[0] ?? ''}${p.lastName?.[0] ?? ''}`.toUpperCase() || p.username[0]?.toUpperCase() || '?';
   });
   private profileService = inject(ProfileService);
+  private authService = inject(AuthService);
   private fb = inject(FormBuilder);
-  infoForm = this.fb.nonNullable.group({
-    username: ['', Validators.required],
-    firstName: [''],
-    lastName: [''],
-    email: ['', [Validators.required, Validators.email]],
-  });
+  infoForm = this.fb.nonNullable.group(
+    {
+      username: ['', Validators.required],
+      firstName: [''],
+      lastName: [''],
+      email: ['', [Validators.required, Validators.email]],
+      currentPassword: [''],
+    },
+    {validators: (control) => this.emailChangeRequiresPasswordValidator(control)}
+  );
 
   passwordForm = this.fb.nonNullable.group(
     {
@@ -115,17 +121,45 @@ export class Profile implements OnInit {
     this.infoError.set(null);
     this.infoSuccess.set(false);
 
+    const previousEmail = this.profile()?.email ?? '';
+    const {email} = this.infoForm.getRawValue();
+    const emailChanged = email.trim().toLowerCase() !== previousEmail.trim().toLowerCase();
+
     this.profileService.updateProfile(this.infoForm.getRawValue()).subscribe({
       next: (data) => {
-        this.profile.set(data);
         this.savingInfo.set(false);
+        if (emailChanged) {
+          // The backend revoked every session on an email change — the
+          // in-memory access token is now stale, so force a fresh login
+          // rather than keep using it silently.
+          this.authService.endLocalSession();
+          return;
+        }
+        this.profile.set(data);
         this.infoSuccess.set(true);
       },
-      error: () => {
-        this.infoError.set('Une erreur est survenue lors de la mise à jour.');
+      error: (err) => {
+        this.infoError.set(
+          err.status === 409
+            ? 'Cet email est déjà utilisé par un autre compte.'
+            : err.status === 400
+              ? 'Mot de passe actuel incorrect.'
+              : 'Une erreur est survenue lors de la mise à jour.'
+        );
         this.savingInfo.set(false);
       },
     });
+  }
+
+  private emailChangeRequiresPasswordValidator(control: AbstractControl): ValidationErrors | null {
+    const email = (control.get('email')?.value ?? '').trim().toLowerCase();
+    const currentPassword = control.get('currentPassword')?.value;
+    const originalEmail = (this.profile()?.email ?? '').trim().toLowerCase();
+
+    if (originalEmail && email && email !== originalEmail && !currentPassword) {
+      return {currentPasswordRequired: true};
+    }
+    return null;
   }
 
   onChangePassword(): void {
@@ -144,6 +178,10 @@ export class Profile implements OnInit {
         this.savingPassword.set(false);
         this.passwordSuccess.set(true);
         this.passwordForm.reset();
+        // The backend revoked every session including this one, so the
+        // in-memory access token is now stale — clear it locally, sync other
+        // tabs, and force a fresh login rather than leaving a dead session.
+        this.authService.endLocalSession();
       },
       error: (err) => {
         this.passwordError.set(

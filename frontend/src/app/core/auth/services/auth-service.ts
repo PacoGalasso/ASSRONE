@@ -1,7 +1,18 @@
 import {HttpClient} from '@angular/common/http';
 import {Router} from '@angular/router';
 import {catchError, map, Observable, of, tap} from 'rxjs';
-import {AuthResponse, Credentials, RegisterRequest, RegisterResponse, User} from '../models/auth.models';
+import {
+  AccountLifecycleMessageResponse,
+  AuthResponse,
+  Credentials,
+  ForgotPasswordRequest,
+  RegisterRequest,
+  RegisterResponse,
+  ResendVerificationRequest,
+  ResetPasswordRequest,
+  User,
+  VerifyEmailRequest
+} from '../models/auth.models';
 import {computed, Injectable, OnDestroy, signal} from '@angular/core';
 
 // Cross-tab logout sync only: the message is a fixed literal, never a token
@@ -60,6 +71,25 @@ export class AuthService implements OnDestroy {
 
   register(request: RegisterRequest): Observable<RegisterResponse> {
     return this.http.post<RegisterResponse>(`${this.API_URL}/addNewUser`, request);
+  }
+
+  // Deliberately never touches auth state: a successful reset must send the
+  // user back to a fresh login, never log them in automatically (see
+  // ResetPassword component).
+  forgotPassword(request: ForgotPasswordRequest): Observable<AccountLifecycleMessageResponse> {
+    return this.http.post<AccountLifecycleMessageResponse>(`${this.API_URL}/forgot-password`, request);
+  }
+
+  resetPassword(request: ResetPasswordRequest): Observable<AccountLifecycleMessageResponse> {
+    return this.http.post<AccountLifecycleMessageResponse>(`${this.API_URL}/reset-password`, request);
+  }
+
+  verifyEmail(request: VerifyEmailRequest): Observable<AccountLifecycleMessageResponse> {
+    return this.http.post<AccountLifecycleMessageResponse>(`${this.API_URL}/verify-email`, request);
+  }
+
+  resendVerification(request: ResendVerificationRequest): Observable<AccountLifecycleMessageResponse> {
+    return this.http.post<AccountLifecycleMessageResponse>(`${this.API_URL}/resend-verification`, request);
   }
 
   // The refresh token itself is never available to this code: it lives in an

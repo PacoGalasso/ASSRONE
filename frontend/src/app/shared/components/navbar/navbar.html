@@ -52,7 +52,7 @@
 
       <div class="flex items-center gap-2 sm:gap-4 flex-shrink-0">
         @if (!isLoggedIn()) {
-          <a routerLink="/auth/login"
+          <a routerLink="/login"
              class="hidden sm:inline-flex px-3 sm:px-4 py-1.5 sm:py-2 rounded-md bg-navy text-white text-xs sm:text-sm font-semibold hover:bg-navy-light transition-colors whitespace-nowrap">
             Se connecter
           </a>
@@ -151,7 +151,7 @@
         }
 
         @if (!isLoggedIn()) {
-          <a routerLink="/auth/login" (click)="closeMenus()"
+          <a routerLink="/login" (click)="closeMenus()"
              class="block px-3 py-2 rounded text-sm bg-navy text-white font-semibold hover:bg-navy-light text-center border-t border-line mt-2 pt-3">
             Se connecter
           </a>

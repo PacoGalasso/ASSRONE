@@ -4,14 +4,37 @@ import {adminGuard} from './core/auth/guards/admin.guard';
 
 export const routes: Routes = [
   // ===== PUBLIC ROUTES (sans AppShell) =====
+  // Délibérément PAS sous /auth/** : ce préfixe est réservé à l'API backend
+  // (proxy.conf.json en dev, "location /auth/" côté nginx en production) et
+  // route toute requête — y compris une navigation GET du navigateur — droit
+  // vers Spring Boot, avant même que le routeur Angular ne s'exécute. Une
+  // page SPA placée sous ce préfixe ne s'affiche donc jamais par navigation
+  // directe ou F5 (voir HistoricalAccountsMigrationLoginTest et le rapport de
+  // ce lot pour la démonstration du 401 qui en résultait sur /auth/reset-password
+  // et /auth/verify-email).
   {
-    path: 'auth',
-    children: [
-      {
-        path: 'login',
-        loadComponent: () => import('./features/auth/pages/login/login').then(m => m.Login)
-      }
-    ]
+    path: 'login',
+    loadComponent: () => import('./features/auth/pages/login/login').then(m => m.Login)
+  },
+  {
+    path: 'forgot-password',
+    loadComponent: () =>
+      import('./features/auth/pages/forgot-password/forgot-password').then(m => m.ForgotPassword)
+  },
+  {
+    path: 'reset-password',
+    loadComponent: () =>
+      import('./features/auth/pages/reset-password/reset-password').then(m => m.ResetPassword)
+  },
+  {
+    path: 'verify-email',
+    loadComponent: () =>
+      import('./features/auth/pages/verify-email/verify-email').then(m => m.VerifyEmail)
+  },
+  {
+    path: 'resend-verification',
+    loadComponent: () =>
+      import('./features/auth/pages/resend-verification/resend-verification').then(m => m.ResendVerification)
   },
 
   // ===== PUBLIC PAGES (sans login requis) =====
